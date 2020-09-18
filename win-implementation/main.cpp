@@ -63,20 +63,67 @@ public:
     }
 } channel_a, channel_b, channel_c;
 
-int8_t render_sample() {
+class MusicState {
+private:
+    MusicData* data{};
+    uint8_t speed{};
+    uint8_t speed_counter{};
+    uint16_t position_ptr{};
+    uint16_t pattern_current_note_ptr{};
+    uint8_t pattern_counter{};
+
+public:
+    void set_data(MusicData* music_data) {
+        data = music_data;
+        speed = music_data->speed;
+        speed_counter = 1;
+        position_ptr = music_data->positions_table;
+        pattern_current_note_ptr = data->read_word(position_ptr);
+        pattern_counter = 60;
+    }
+
+    void parse_note(Channel& channel) {
+        auto note = data->read_byte(pattern_current_note_ptr ++);
+
+        if (note < 0x80) {
+            channel.init_tone(note);
+        }
+    }
+
+    void next() {
+        if (--speed_counter)
+            return;
+        speed_counter = speed;
+
+        if (!pattern_counter)
+            return;
+        pattern_counter --;
+
+        parse_note(channel_a);
+        parse_note(channel_b);
+        parse_note(channel_c);
+        parse_note(channel_c); // Pseudo channel, used only for commands
+    }
+} state;
+
+int8_t render_sample(size_t tick) {
+    if ( (tick % (SAMPLES_PER_SEC / 50)) == 0)
+        state.next();
     return channel_a.render() + channel_b.render() + channel_c.render();
 }
 
-void render(MusicData music_data) {
+void render(MusicData& music_data) {
     init_sine_table();
     init_tone_period_table();
+
+    state.set_data(&music_data);
 
     channel_a.enable_tone(true);
     channel_b.enable_tone(true);
     channel_c.enable_tone(true);
 
-    for (float &sample : output_buffer)
-        sample = float(render_sample()) / 128;
+    for (size_t i = 0; i<OUTPUT_BUFFER_LENGTH; i++)
+        output_buffer[i] = float(render_sample(i)) / 128;
 }
 
 int main() {
