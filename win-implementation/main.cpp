@@ -2,6 +2,8 @@
 #include <xaudio2.h>
 #include <cmath>
 
+#include "music_data.h"
+
 constexpr size_t NUMBER_OF_NOTES = 80;
 constexpr size_t SINE_TABLE_SIZE = 128;
 constexpr unsigned int CHANNEL_OUTPUT_VOLUME = (128 / 4 - 1);
@@ -65,27 +67,25 @@ int8_t render_sample() {
     return channel_a.render() + channel_b.render() + channel_c.render();
 }
 
-void render() {
+void render(MusicData music_data) {
     init_sine_table();
     init_tone_period_table();
 
-    channel_a.init_tone(45);
-    channel_b.init_tone(49);
-    channel_c.init_tone(52);
     channel_a.enable_tone(true);
     channel_b.enable_tone(true);
     channel_c.enable_tone(true);
 
     for (float &sample : output_buffer)
         sample = float(render_sample()) / 128;
-    for (size_t i = 0; i < 1000; i++)
-        std::cout << output_buffer[i] << std::endl;
 }
 
 int main() {
     CoInitialize(0);
 
-    render();
+    MusicData music_data_1 = get_music_data_1();
+    MusicData music_data_2 = get_music_data_2();
+
+    render(music_data_1);
 
     IXAudio2 *pXAudio2 = NULL;
     HRESULT hr;
