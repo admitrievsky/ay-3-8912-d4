@@ -9,8 +9,8 @@ constexpr size_t SINE_TABLE_SIZE = 128;
 constexpr unsigned int CHANNEL_OUTPUT_VOLUME = (128 / 4 - 1);
 constexpr uint8_t MAX_AY_CHANNEL_VOLUME = 15;
 constexpr double M_PI = 3.14159265358979323846;
-constexpr unsigned int SAMPLES_PER_SEC = 44100;
-constexpr size_t OUTPUT_BUFFER_LENGTH = SAMPLES_PER_SEC * 10;
+constexpr unsigned int SAMPLES_PER_SEC = 11025;
+constexpr size_t OUTPUT_BUFFER_LENGTH = SAMPLES_PER_SEC * 100;
 
 
 int8_t sine_table[SINE_TABLE_SIZE];
@@ -29,6 +29,9 @@ void init_tone_period_table() {
         tone_period_table[n] = lround((SINE_TABLE_SIZE * frequency / SAMPLES_PER_SEC) * 256);
     }
 }
+
+class ParseException : std::exception {
+};
 
 class Channel {
 private:
@@ -63,56 +66,104 @@ public:
     }
 } channel_a, channel_b, channel_c;
 
+struct ChannelState {
+    uint8_t current_note{};
+    uint16_t instrument_ptr{};
+    uint16_t instrument_playback_ptr{};
+};
+
 class MusicState {
 private:
-    MusicData* data{};
+    MusicData *data{};
     uint8_t speed{};
     uint8_t speed_counter{};
     uint16_t position_ptr{};
     uint16_t pattern_current_note_ptr{};
     uint8_t pattern_counter{};
+    uint16_t instrument_set_for_position{};
+    uint16_t pattern_instrument_set_ptr{};
 
-public:
-    void set_data(MusicData* music_data) {
-        data = music_data;
-        speed = music_data->speed;
-        speed_counter = 1;
-        position_ptr = music_data->positions_table;
-        pattern_current_note_ptr = data->read_word(position_ptr);
-        pattern_counter = 60;
+    ChannelState state_a, state_b, state_c;
+
+    void init() {
+        start_from_the_beginning();
+        init_next_pattern();
     }
 
-    void parse_note(Channel& channel) {
-        auto note = data->read_byte(pattern_current_note_ptr ++);
+    void start_from_the_beginning() {
+        speed = data->speed;
+        speed_counter = 1;
+        position_ptr = data->positions_table;
+        instrument_set_for_position = data->instrument_table_for_positions;
+    }
 
-        if (note < 0x80) {
-            channel.init_tone(note);
+    void init_next_pattern() {
+        while ((pattern_current_note_ptr = data->read_word(position_ptr)) == 0xFFFF) {
+            start_from_the_beginning();
         }
+        pattern_counter = 63;
+        pattern_current_note_ptr = data->read_word(position_ptr);
+        pattern_instrument_set_ptr = data->read_word(instrument_set_for_position);
+
+        position_ptr += 2;
+        instrument_set_for_position += 2;
+    }
+
+public:
+
+    void set_data(MusicData *music_data) {
+        data = music_data;
+        init();
+    }
+
+    void parse_note(Channel &channel, ChannelState &channel_state) {
+        while (true) {
+            auto note = data->read_byte(pattern_current_note_ptr++);
+            if (!note)
+                return;
+            if (note < 0x80) {
+                channel.init_tone(note);
+                channel_state.current_note = note;
+                channel_state.instrument_playback_ptr = channel_state.instrument_ptr;
+                return;
+            }
+            if ((note & 0xE0u) == 0x80) {
+                uint8_t instrument = note & 0x1Fu;
+                if (instrument < 0x10) {
+                    channel_state.instrument_ptr = data->read_word(pattern_instrument_set_ptr + instrument * 2);
+                    continue;
+                } else {
+                    // not clear???
+                    continue;
+                }
+            }
+        }
+
     }
 
     void next() {
-        if (--speed_counter)
-            return;
-        speed_counter = speed;
+        if (!--speed_counter) {
+            speed_counter = speed;
 
-        if (!pattern_counter)
-            return;
-        pattern_counter --;
+            if (!pattern_counter)
+                init_next_pattern();
+            pattern_counter--;
 
-        parse_note(channel_a);
-        parse_note(channel_b);
-        parse_note(channel_c);
-        parse_note(channel_c); // Pseudo channel, used only for commands
+            parse_note(channel_a, state_a);
+            parse_note(channel_b, state_b);
+            parse_note(channel_c, state_c);
+            parse_note(channel_c, state_c); // Pseudo channel, used only for commands
+        }
     }
 } state;
 
 int8_t render_sample(size_t tick) {
-    if ( (tick % (SAMPLES_PER_SEC / 50)) == 0)
+    if ((tick % (SAMPLES_PER_SEC / 50)) == 0)
         state.next();
     return channel_a.render() + channel_b.render() + channel_c.render();
 }
 
-void render(MusicData& music_data) {
+void render(MusicData &music_data) {
     init_sine_table();
     init_tone_period_table();
 
@@ -122,7 +173,7 @@ void render(MusicData& music_data) {
     channel_b.enable_tone(true);
     channel_c.enable_tone(true);
 
-    for (size_t i = 0; i<OUTPUT_BUFFER_LENGTH; i++)
+    for (size_t i = 0; i < OUTPUT_BUFFER_LENGTH; i++)
         output_buffer[i] = float(render_sample(i)) / 128;
 }
 
@@ -132,7 +183,12 @@ int main() {
     MusicData music_data_1 = get_music_data_1();
     MusicData music_data_2 = get_music_data_2();
 
-    render(music_data_1);
+    try {
+        render(music_data_1);
+    } catch (ParseException) {
+        std::cout << "Parse exception";
+        return 1;
+    }
 
     IXAudio2 *pXAudio2 = NULL;
     HRESULT hr;
