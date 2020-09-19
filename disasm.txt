@@ -1,0 +1,4419 @@
+ROM:C000 ; Processor       : z80 []
+ROM:C000 ; Target assembler: Zilog Macro Assembler
+ROM:C000
+ROM:C000 ; ===========================================================================
+ROM:C000
+ROM:C000 ; Segment type: Pure code
+ROM:C000                 segment ROM
+ROM:C000                 org 0C000h
+ROM:C000
+ROM:C000 ; --------------- S U B R O U T I N E ---------------------------------------
+ROM:C000
+ROM:C000
+ROM:C000 init:                                   ; CODE XREF: ROM:C01Cp
+ROM:C000                 ld      hl, position_table
+ROM:C003                 ld      (current_position_ptr), hl
+ROM:C006                 ld      hl, 0C313h
+ROM:C009                 ld      (instrument_set_ptr), hl
+ROM:C00C                 ld      a, 1
+ROM:C00E                 ld      (speed_counter), a ; reset the speed counter
+ROM:C011                 ld      a, 7
+ROM:C013                 ld      (speed), a      ; set speed of the music
+ROM:C016                 ld      a, 1
+ROM:C018                 ld      (init_next_note+1), a
+ROM:C01B                 ret
+ROM:C01B ; End of function init
+ROM:C01B
+ROM:C01C ; ---------------------------------------------------------------------------
+ROM:C01C                 call    init
+ROM:C01F
+ROM:C01F play_loop:                              ; CODE XREF: ROM:C02Cj
+ROM:C01F                 ei
+ROM:C020                 halt                    ; wait until next frame
+ROM:C021                 call    play_frame
+ROM:C024                 ld      a, 7Fh ; ''
+ROM:C026                 in      a, (0FEh)       ; read the keyboard
+ROM:C028                 rra                     ; is the space key pressed?
+ROM:C029                 jp      nc, play_exit
+ROM:C02C                 jp      play_loop
+ROM:C02F ; ---------------------------------------------------------------------------
+ROM:C02F
+ROM:C02F play_exit:                              ; CODE XREF: ROM:C029j
+ROM:C02F                 call    ay_reset
+ROM:C032                 ret
+ROM:C033 ; ---------------------------------------------------------------------------
+ROM:C033
+ROM:C033 play_frame:                             ; CODE XREF: ROM:C021p
+ROM:C033                 ld      a, (speed_counter)
+ROM:C036                 dec     a
+ROM:C037                 ld      (speed_counter), a
+ROM:C03A                 jp      nz, manage_current_note
+ROM:C03D                 ld      a, (speed)
+ROM:C040                 ld      (speed_counter), a
+ROM:C043
+ROM:C043 init_next_note:                         ; DATA XREF: init+18w
+ROM:C043                                         ; ROM:C048w ...
+ROM:C043                 ld      a, 3Ah ; ':'    ; read the pattern counter
+ROM:C045                 dec     a
+ROM:C046                 and     3Fh ; '?'
+ROM:C048                 ld      (init_next_note+1), a ; store the decremented and trimmed value
+ROM:C04B                 jp      nz, init_next_note_in_current_pattern
+ROM:C04E                 ld      hl, (current_position_ptr)
+ROM:C051
+ROM:C051 init_next_position:                     ; CODE XREF: ROM:C069j
+ROM:C051                 ld      e, (hl)         ; read next pattern address from position table
+ROM:C052                 inc     hl
+ROM:C053                 ld      d, (hl)
+ROM:C054                 ld      a, d
+ROM:C055                 cp      0FFh            ; start from the beginning if we got #FFFF
+ROM:C057                 jp      nz, init_pattern
+ROM:C05A                 ld      a, e
+ROM:C05B                 cp      0FFh
+ROM:C05D                 jp      nz, init_pattern
+ROM:C060                 ld      hl, 0C313h      ; load address of instument set for the 1 position
+ROM:C063                 ld      (instrument_set_ptr), hl
+ROM:C066                 ld      hl, 0C5BEh      ; position_table
+ROM:C069                 jp      init_next_position
+ROM:C06C ; ---------------------------------------------------------------------------
+ROM:C06C
+ROM:C06C init_pattern:                           ; CODE XREF: ROM:C057j
+ROM:C06C                                         ; ROM:C05Dj
+ROM:C06C                 ld      (current_note_ptr), de
+ROM:C070                 inc     hl
+ROM:C071                 ld      (current_position_ptr), hl ; store current position
+ROM:C074                 ld      hl, (instrument_set_ptr) ; get instrument set for the pattern
+ROM:C077                 ld      e, (hl)
+ROM:C078                 inc     hl
+ROM:C079                 ld      d, (hl)
+ROM:C07A                 inc     hl
+ROM:C07B                 ld      (instrument_set_ptr), hl
+ROM:C07E                 ld      (current_instrument_set_holder+1), de ; store current instrument set ptr
+ROM:C082
+ROM:C082 init_next_note_in_current_pattern:      ; CODE XREF: ROM:C04Bj
+ROM:C082                 ld      ix, 0C2C5h      ; channel #1 state data
+ROM:C086                 ld      iy, 0C2F5h
+ROM:C08A                 ld      hl, (current_note_ptr)
+ROM:C08D                 call    init_note_in_channel ; INPUT:
+ROM:C08D                                         ; ix - channel state data
+ROM:C08D                                         ; iy - channel tone register buf
+ROM:C08D                                         ; hl - current note data ptr
+ROM:C090                 ld      ix, 0C2CFh      ; channel #2 state data
+ROM:C094                 ld      iy, 0C2F6h
+ROM:C098                 call    init_note_in_channel ; INPUT:
+ROM:C098                                         ; ix - channel state data
+ROM:C098                                         ; iy - channel tone register buf
+ROM:C098                                         ; hl - current note data ptr
+ROM:C09B                 ld      ix, 0C2D9h      ; channel #3 state data
+ROM:C09F                 ld      iy, 0C2F7h
+ROM:C0A3                 call    init_note_in_channel ; INPUT:
+ROM:C0A3                                         ; ix - channel state data
+ROM:C0A3                                         ; iy - channel tone register buf
+ROM:C0A3                                         ; hl - current note data ptr
+ROM:C0A6                 ld      ix, 0C2E3h      ; channel #4 (pseudo) state data
+ROM:C0AA                 ld      iy, 0C5BBh
+ROM:C0AE                 call    init_note_in_channel ; INPUT:
+ROM:C0AE                                         ; ix - channel state data
+ROM:C0AE                                         ; iy - channel tone register buf
+ROM:C0AE                                         ; hl - current note data ptr
+ROM:C0B1                 ld      (current_note_ptr), hl
+ROM:C0B4
+ROM:C0B4 manage_current_note:                    ; CODE XREF: ROM:C03Aj
+ROM:C0B4                 ld      iy, 0C2EDh      ; channel A tone register buf
+ROM:C0B8                 ld      c, 1001b
+ROM:C0BA                 ld      ix, 0C2C5h      ; channel A state
+ROM:C0BE                 ld      de, 0C2F5h      ; channel A amplitude register buf
+ROM:C0C1                 call    manage_current_note_in_channel ; INPUT:
+ROM:C0C1                                         ; ix - channel state data
+ROM:C0C1                                         ; iy - channel tone register buf
+ROM:C0C1                                         ; de - channel amplitude register buf
+ROM:C0C1                                         ; b - mixer register mask for channel
+ROM:C0C4                 ld      (instrument_position_A), hl ; store current sample position to ix+8
+ROM:C0C7                 ld      iy, 0C2EFh      ; channel B tone register buf
+ROM:C0CB                 ld      c, 101111b
+ROM:C0CD                 ld      b, 111101b      ; 0011_1101 - mixer register mask for channel B, tone enable only (inverted)
+ROM:C0CF                 ld      ix, 0C2CFh      ; channel B state
+ROM:C0D3                 ld      de, 0C2F6h      ; channel B amplitude register buf
+ROM:C0D6                 call    manage_current_note_in_channel ; INPUT:
+ROM:C0D6                                         ; ix - channel state data
+ROM:C0D6                                         ; iy - channel tone register buf
+ROM:C0D6                                         ; de - channel amplitude register buf
+ROM:C0D6                                         ; b - mixer register mask for channel
+ROM:C0D9                 ld      (instrument_position_B), hl ; store current sample position to ix+8
+ROM:C0DC                 ld      iy, 0C2F1h      ; channel C tone register buf
+ROM:C0E0                 ld      c, 100b
+ROM:C0E2                 ld      b, 11011011b    ; mixer register mask for C channel, noise and tone enable (inverted)
+ROM:C0E4                 ld      ix, 0C2D9h      ; channel B state
+ROM:C0E8                 ld      de, 0C2F7h      ; channel C amplitude register buf
+ROM:C0EB                 call    manage_current_note_in_channel ; INPUT:
+ROM:C0EB                                         ; ix - channel state data
+ROM:C0EB                                         ; iy - channel tone register buf
+ROM:C0EB                                         ; de - channel amplitude register buf
+ROM:C0EB                                         ; b - mixer register mask for channel
+ROM:C0EE                 ld      (instrument_position_C), hl ; store current sample position to ix+8
+ROM:C0F1                 call    ay_out          ; transfer registers buf to ay registers
+ROM:C0F4                 ret
+ROM:C0F5
+ROM:C0F5 ; --------------- S U B R O U T I N E ---------------------------------------
+ROM:C0F5
+ROM:C0F5 ; INPUT:
+ROM:C0F5 ; ix - channel state data
+ROM:C0F5 ; iy - channel tone register buf
+ROM:C0F5 ; de - channel amplitude register buf
+ROM:C0F5 ; b - mixer register mask for channel
+ROM:C0F5
+ROM:C0F5 manage_current_note_in_channel:         ; CODE XREF: ROM:C0C1p
+ROM:C0F5                                         ; ROM:C0D6p ...
+ROM:C0F5                 ld      a, (speed_counter) ; trash
+ROM:C0F8                 ld      l, (ix+6)
+ROM:C0FB                 ld      h, (ix+7)
+ROM:C0FE                 ld      a, (hl)         ; read sample type
+ROM:C0FF                 ld      l, (ix+8)       ; read current sample position
+ROM:C102                 ld      h, (ix+9)
+ROM:C105                 or      a
+ROM:C106                 jp      z, manage_ornament
+ROM:C109                 cp      1
+ROM:C10B                 jp      z, manage_sample
+ROM:C10E                 cp      2
+ROM:C110                 jp      z, manage_noise
+ROM:C113                 ret
+ROM:C114 ; ---------------------------------------------------------------------------
+ROM:C114
+ROM:C114 manage_noise:                           ; CODE XREF: manage_current_note_in_channel+1Bj
+ROM:C114                 ld      a, (hl)
+ROM:C115                 cp      0FFh            ; is it the end of the sample?
+ROM:C117                 jp      nz, manage_noise_continue
+ROM:C11A                 xor     a               ; the end, mute the channel, wait for next note
+ROM:C11B                 ld      (de), a
+ROM:C11C                 ret
+ROM:C11D ; ---------------------------------------------------------------------------
+ROM:C11D
+ROM:C11D manage_noise_continue:                  ; CODE XREF: manage_current_note_in_channel+22j
+ROM:C11D                 push    hl
+ROM:C11E                 bit     7, a
+ROM:C120                 jp      z, manage_noise_generate_tone
+ROM:C123                 ex      af, af'
+ROM:C124                 ld      a, (mixer_control_reg_buf) ; enable noise, disable tone for channel
+ROM:C127                 and     b
+ROM:C128                 or      c
+ROM:C129                 ld      (mixer_control_reg_buf), a
+ROM:C12C                 ex      af, af'
+ROM:C12D                 and     1Fh
+ROM:C12F                 ld      (noise_generator_control_reg_buf), a ; select noise frequency
+ROM:C132                 ld      hl, 0           ; do not generate tone, only noise
+ROM:C135                 jp      manage_noise_exit
+ROM:C138 ; ---------------------------------------------------------------------------
+ROM:C138
+ROM:C138 manage_noise_generate_tone:             ; CODE XREF: manage_current_note_in_channel+2Bj
+ROM:C138                 ex      af, af'
+ROM:C139                 ld      a, (mixer_control_reg_buf) ; disable noise, enable tone
+ROM:C13C                 and     b
+ROM:C13D                 rlc     c
+ROM:C13F                 rlc     c
+ROM:C141                 rlc     c
+ROM:C143                 or      c
+ROM:C144                 ld      (mixer_control_reg_buf), a
+ROM:C147                 ex      af, af'
+ROM:C148                 ld      l, (ix+1)       ; trash
+ROM:C14B                 ld      h, (ix+2)       ; trash
+ROM:C14E                 and     3Fh ; '?'       ; play note from sample, not from position
+ROM:C150                 ld      c, a
+ROM:C151                 ld      b, 0
+ROM:C153                 ld      hl, 0C4F9h      ; note_period_table
+ROM:C156                 add     hl, bc
+ROM:C157                 ld      a, (hl)
+ROM:C158                 inc     hl
+ROM:C159                 ld      h, (hl)
+ROM:C15A                 ld      l, a
+ROM:C15B
+ROM:C15B manage_noise_exit:                      ; CODE XREF: manage_current_note_in_channel+40j
+ROM:C15B                 ld      (iy+0), l
+ROM:C15E                 ld      (iy+1), h
+ROM:C161                 pop     hl
+ROM:C162                 inc     hl
+ROM:C163                 ld      a, (hl)         ; read and store note volume
+ROM:C164                 ld      (de), a
+ROM:C165                 inc     hl
+ROM:C166                 ret
+ROM:C167 ; ---------------------------------------------------------------------------
+ROM:C167
+ROM:C167 manage_ornament:                        ; CODE XREF: manage_current_note_in_channel+11j
+ROM:C167                 ld      a, (hl)
+ROM:C168                 cp      0FFh
+ROM:C16A                 ret     z               ; the end, wait for next note
+ROM:C16B                 bit     7, a
+ROM:C16D                 jp      z, manage_ornament_positive_value
+ROM:C170                 and     7Fh ; ''       ; manage_ornament_negative_value
+ROM:C172                 sub     (ix+0)          ; alter note velocity
+ROM:C175                 add     a, a
+ROM:C176                 ld      c, a
+ROM:C177                 ld      b, 0
+ROM:C179                 push    hl
+ROM:C17A                 ld      hl, 0C4F9h      ; note period table
+ROM:C17D                 add     hl, bc
+ROM:C17E                 ld      a, (hl)
+ROM:C17F                 ld      (iy+0), a       ; store new note period
+ROM:C182                 inc     hl
+ROM:C183                 ld      a, (hl)
+ROM:C184                 ld      (iy+1), a
+ROM:C187                 pop     hl
+ROM:C188                 inc     hl
+ROM:C189                 jp      manage_current_note_in_channel_exit
+ROM:C18C ; ---------------------------------------------------------------------------
+ROM:C18C
+ROM:C18C manage_ornament_positive_value:         ; CODE XREF: manage_current_note_in_channel+78j
+ROM:C18C                 and     7Fh ; ''
+ROM:C18E                 add     a, (ix+0)       ; alter note velocity
+ROM:C191                 add     a, a
+ROM:C192                 ld      c, a
+ROM:C193                 ld      b, 0
+ROM:C195                 push    hl
+ROM:C196                 ld      hl, 0C4F9h      ; note_period_table
+ROM:C199                 add     hl, bc
+ROM:C19A                 ld      a, (hl)
+ROM:C19B                 ld      (iy+0), a       ; store new note period
+ROM:C19E                 inc     hl
+ROM:C19F                 ld      a, (hl)
+ROM:C1A0                 ld      (iy+1), a
+ROM:C1A3                 pop     hl
+ROM:C1A4                 inc     hl
+ROM:C1A5                 jp      manage_current_note_in_channel_exit
+ROM:C1A8 ; ---------------------------------------------------------------------------
+ROM:C1A8
+ROM:C1A8 manage_sample:                          ; CODE XREF: manage_current_note_in_channel+16j
+ROM:C1A8                 ld      a, (hl)
+ROM:C1A9                 cp      0FFh
+ROM:C1AB                 ret     z               ; the end, wait for next note
+ROM:C1AC                 bit     7, a            ; check sign
+ROM:C1AE                 jp      z, manage_sample_positive_value
+ROM:C1B1                 and     7Fh ; ''       ; sample type 1 negative value
+ROM:C1B3                 ld      c, a
+ROM:C1B4                 ld      b, 0
+ROM:C1B6                 push    hl
+ROM:C1B7                 ld      l, (ix+1)
+ROM:C1BA                 ld      h, (ix+2)
+ROM:C1BD                 sbc     hl, bc          ; substract period by sample value
+ROM:C1BF                 ld      (iy+0), l       ; store new note period
+ROM:C1C2                 ld      (iy+1), h
+ROM:C1C5                 pop     hl
+ROM:C1C6                 inc     hl
+ROM:C1C7                 jp      manage_current_note_in_channel_exit
+ROM:C1CA ; ---------------------------------------------------------------------------
+ROM:C1CA
+ROM:C1CA manage_sample_positive_value:           ; CODE XREF: manage_current_note_in_channel+B9j
+ROM:C1CA                 and     7Fh ; ''
+ROM:C1CC                 ld      c, a
+ROM:C1CD                 ld      b, 0
+ROM:C1CF                 push    hl
+ROM:C1D0                 ld      l, (ix+1)
+ROM:C1D3                 ld      h, (ix+2)
+ROM:C1D6                 add     hl, bc          ; add period by sample value
+ROM:C1D7                 ld      (iy+0), l       ; store new note period
+ROM:C1DA                 ld      (iy+1), h
+ROM:C1DD                 pop     hl
+ROM:C1DE                 inc     hl
+ROM:C1DF
+ROM:C1DF manage_current_note_in_channel_exit:    ; CODE XREF: manage_current_note_in_channel+94j
+ROM:C1DF                                         ; manage_current_note_in_channel+B0j ...
+ROM:C1DF                 ld      a, (hl)         ; read and store the volume for channel
+ROM:C1E0                 inc     hl
+ROM:C1E1                 ld      (de), a
+ROM:C1E2                 ret
+ROM:C1E2 ; End of function manage_current_note_in_channel
+ROM:C1E2
+ROM:C1E3
+ROM:C1E3 ; --------------- S U B R O U T I N E ---------------------------------------
+ROM:C1E3
+ROM:C1E3
+ROM:C1E3 ay_reset:                               ; CODE XREF: ROM:play_exitp
+ROM:C1E3                 ld      hl, 0C2FCh      ; ay_registers_init
+ROM:C1E6                 ld      de, 0C2EDh      ; ay_out_buf
+ROM:C1E9                 ld      bc, 0Fh
+ROM:C1EC                 ldir
+ROM:C1EC ; End of function ay_reset
+ROM:C1EC
+ROM:C1EE
+ROM:C1EE ; --------------- S U B R O U T I N E ---------------------------------------
+ROM:C1EE
+ROM:C1EE
+ROM:C1EE ay_out:                                 ; CODE XREF: ROM:C0F1p
+ROM:C1EE                 ld      hl, 0C2EDh      ; ay_registers_init
+ROM:C1F1                 xor     a
+ROM:C1F2
+ROM:C1F2 ay_out_loop:                            ; CODE XREF: ay_out+12j
+ROM:C1F2                 ld      bc, 0FFFDh      ; AY_ADDRESS_PORT
+ROM:C1F5                 out     (c), a
+ROM:C1F7                 ld      e, (hl)
+ROM:C1F8                 inc     hl
+ROM:C1F9                 ld      b, 0BFh ; '¬'   ; Switch to AY_DATA_PORT
+ROM:C1FB                 out     (c), e
+ROM:C1FD                 inc     a
+ROM:C1FE                 cp      0Fh
+ROM:C200                 jp      nz, ay_out_loop
+ROM:C203                 ret
+ROM:C203 ; End of function ay_out
+ROM:C203
+ROM:C204
+ROM:C204 ; --------------- S U B R O U T I N E ---------------------------------------
+ROM:C204
+ROM:C204 ; INPUT:
+ROM:C204 ; ix - channel state data
+ROM:C204 ; iy - channel tone register buf
+ROM:C204 ; hl - current note data ptr
+ROM:C204
+ROM:C204 init_note_in_channel:                   ; CODE XREF: ROM:C08Dp
+ROM:C204                                         ; ROM:C098p ...
+ROM:C204                 ld      a, (hl)
+ROM:C205                 and     80h ; 'À'       ; is it a regular note (code < 0x80)?
+ROM:C207                 jp      z, init_regular_note
+ROM:C20A                 ld      a, (hl)         ; parse command
+ROM:C20B                 and     0E0h ; 'ð'
+ROM:C20D                 cp      0E0h ; 'ð'
+ROM:C20F                 jp      z, loc_C259
+ROM:C212                 cp      0C0h ; 'L'      ; is it jump to position command?
+ROM:C214                 jp      z, jump_to_position
+ROM:C217                 cp      80h ; 'À'
+ROM:C219                 jp      z, setup_instrument_for_channel
+ROM:C21C                 cp      0A0h ; 'à'      ; is it change speed command? (not used in this tune)
+ROM:C21E                 jp      z, change_speed
+ROM:C221                 ret
+ROM:C222 ; ---------------------------------------------------------------------------
+ROM:C222
+ROM:C222 change_speed:                           ; CODE XREF: init_note_in_channel+1Aj
+ROM:C222                 ld      a, (hl)
+ROM:C223                 and     0Fh
+ROM:C225                 ld      (speed_counter), a
+ROM:C228                 ld      (speed), a
+ROM:C22B                 inc     hl
+ROM:C22C                 jp      init_note_in_channel ; INPUT:
+ROM:C22C                                         ; ix - channel state data
+ROM:C22C                                         ; iy - channel tone register buf
+ROM:C22C                                         ; hl - current note data ptr
+ROM:C22F ; ---------------------------------------------------------------------------
+ROM:C22F
+ROM:C22F init_regular_note:                      ; CODE XREF: init_note_in_channel+3j
+ROM:C22F                 ld      a, (hl)         ; read current note
+ROM:C230                 or      a               ; is it no op?
+ROM:C231                 jp      z, init_regular_note_exit
+ROM:C234                 ld      (ix+0), a       ; store the note
+ROM:C237                 add     a, a
+ROM:C238                 push    hl
+ROM:C239                 ld      l, a            ; read note period (frequency) from table
+ROM:C239                                         ; and store it to ix+1, ix+2
+ROM:C23A                 ld      h, 0
+ROM:C23C                 ld      bc, 0C4F9h      ; note period table
+ROM:C23F                 add     hl, bc
+ROM:C240                 ld      a, (hl)
+ROM:C241                 ld      (ix+1), a
+ROM:C244                 inc     hl
+ROM:C245                 ld      a, (hl)
+ROM:C246                 ld      (ix+2), a
+ROM:C249                 ld      l, (ix+6)       ; start a sample from the beginning due to note changed
+ROM:C24C                 ld      h, (ix+7)
+ROM:C24F                 inc     hl
+ROM:C250                 ld      (ix+8), l
+ROM:C253                 ld      (ix+9), h
+ROM:C256                 pop     hl
+ROM:C257
+ROM:C257 init_regular_note_exit:                 ; CODE XREF: init_note_in_channel+2Dj
+ROM:C257                 inc     hl
+ROM:C258                 ret
+ROM:C259 ; ---------------------------------------------------------------------------
+ROM:C259
+ROM:C259 loc_C259:                               ; CODE XREF: init_note_in_channel+Bj
+ROM:C259                 ld      a, (hl)
+ROM:C25A                 and     1Fh
+ROM:C25C                 bit     4, a
+ROM:C25E                 ld      c, 1
+ROM:C260                 jp      z, loc_C265
+ROM:C263                 ld      c, 0
+ROM:C265
+ROM:C265 loc_C265:                               ; CODE XREF: init_note_in_channel+5Cj
+ROM:C265                 and     0Fh
+ROM:C267                 ld      (ix+4), a
+ROM:C26A                 ld      (ix+3), c
+ROM:C26D                 inc     hl
+ROM:C26E                 jp      init_note_in_channel ; INPUT:
+ROM:C26E                                         ; ix - channel state data
+ROM:C26E                                         ; iy - channel tone register buf
+ROM:C26E                                         ; hl - current note data ptr
+ROM:C271 ; ---------------------------------------------------------------------------
+ROM:C271
+ROM:C271 jump_to_position:                       ; CODE XREF: init_note_in_channel+10j
+ROM:C271                 ld      a, (hl)         ; read and trim position number
+ROM:C272                 and     1Fh
+ROM:C274                 jp      nz, jump_to_position_cont ; it can't be a zero. Why?
+ROM:C277                 ld      a, 1            ; will switch position on next iteration
+ROM:C279                 ld      (init_next_note+1), a
+ROM:C27C                 inc     hl
+ROM:C27D                 jp      init_note_in_channel ; INPUT:
+ROM:C27D                                         ; ix - channel state data
+ROM:C27D                                         ; iy - channel tone register buf
+ROM:C27D                                         ; hl - current note data ptr
+ROM:C280 ; ---------------------------------------------------------------------------
+ROM:C280
+ROM:C280 jump_to_position_cont:                  ; CODE XREF: init_note_in_channel+70j
+ROM:C280                 add     a, a            ; read position table and init position pointer
+ROM:C281                 ld      c, a
+ROM:C282                 ld      b, 0
+ROM:C284                 push    hl
+ROM:C285                 ld      hl, 0C5BEh      ; position table
+ROM:C288                 add     hl, bc
+ROM:C289                 ld      (current_position_ptr), hl
+ROM:C28C                 ld      hl, 0C313h
+ROM:C28F                 add     hl, bc
+ROM:C290                 ld      (instrument_set_ptr), hl
+ROM:C293                 ld      a, 1            ; will switch position on next iteration
+ROM:C295                 ld      (init_next_note+1), a
+ROM:C298                 pop     hl
+ROM:C299                 inc     hl
+ROM:C29A                 jp      init_note_in_channel ; INPUT:
+ROM:C29A                                         ; ix - channel state data
+ROM:C29A                                         ; iy - channel tone register buf
+ROM:C29A                                         ; hl - current note data ptr
+ROM:C29D ; ---------------------------------------------------------------------------
+ROM:C29D
+ROM:C29D setup_instrument_for_channel:           ; CODE XREF: init_note_in_channel+15j
+ROM:C29D                 ld      a, (hl)
+ROM:C29E                 and     1Fh
+ROM:C2A0                 bit     4, a
+ROM:C2A2                 jp      z, setup_instrument_for_channel_continue
+ROM:C2A5                 and     0Fh
+ROM:C2A7                 ld      (ix+5), a       ; not sure why this, ix+5 is never used again
+ROM:C2AA                 inc     hl
+ROM:C2AB                 jp      init_note_in_channel ; INPUT:
+ROM:C2AB                                         ; ix - channel state data
+ROM:C2AB                                         ; iy - channel tone register buf
+ROM:C2AB                                         ; hl - current note data ptr
+ROM:C2AE ; ---------------------------------------------------------------------------
+ROM:C2AE
+ROM:C2AE setup_instrument_for_channel_continue:  ; CODE XREF: init_note_in_channel+9Ej
+ROM:C2AE                 add     a, a            ; find instrument data address in table
+ROM:C2AF                 ld      c, a
+ROM:C2B0                 ld      b, 0
+ROM:C2B2                 push    hl
+ROM:C2B3
+ROM:C2B3 current_instrument_set_holder:          ; DATA XREF: ROM:C07Ew
+ROM:C2B3                 ld      hl, 0C331h      ; read current isntrument table ptr
+ROM:C2B6                 add     hl, bc
+ROM:C2B7                 ld      a, (hl)
+ROM:C2B8                 ld      (ix+6), a       ; store instrument address to ix+6, ix+7
+ROM:C2BB                 inc     hl
+ROM:C2BC                 ld      a, (hl)
+ROM:C2BD                 ld      (ix+7), a
+ROM:C2C0                 pop     hl
+ROM:C2C1                 inc     hl
+ROM:C2C2                 jp      init_note_in_channel ; INPUT:
+ROM:C2C2 ; End of function init_note_in_channel  ; ix - channel state data
+ROM:C2C2                                         ; iy - channel tone register buf
+ROM:C2C2                                         ; hl - current note data ptr
+ROM:C2C2 ; ---------------------------------------------------------------------------
+ROM:C2C5 channel_A_state:db  3Ah ; :
+ROM:C2C6                 db  87h ; Ç
+ROM:C2C7                 db    0
+ROM:C2C8                 db    0
+ROM:C2C9                 db    0
+ROM:C2CA                 db  0Fh
+ROM:C2CB                 db 0D7h ; +
+ROM:C2CC                 db 0C4h ; -
+ROM:C2CD instrument_position_A:dw 0C4DEh         ; DATA XREF: ROM:C0C4w
+ROM:C2CF channel_B_state:db  19h
+ROM:C2D0                 db  8Ah ; Ê
+ROM:C2D1                 db    3
+ROM:C2D2                 db    0
+ROM:C2D3                 db    0
+ROM:C2D4                 db  0Fh
+ROM:C2D5                 db  33h ; 3
+ROM:C2D6                 db 0C4h ; -
+ROM:C2D7 instrument_position_B:dw 0C446h         ; DATA XREF: ROM:C0D9w
+ROM:C2D9 channel_C_state:db  18h
+ROM:C2DA                 db 0C0h ; L
+ROM:C2DB                 db    3
+ROM:C2DC                 db    0
+ROM:C2DD                 db    0
+ROM:C2DE                 db  0Fh
+ROM:C2DF                 db  89h ; É
+ROM:C2E0                 db 0C4h ; -
+ROM:C2E1 instrument_position_C:dw 0C48Ah         ; DATA XREF: ROM:C0EEw
+ROM:C2E3                 db  18h
+ROM:C2E4                 db 0C0h ; L
+ROM:C2E5                 db    3
+ROM:C2E6                 db    0
+ROM:C2E7                 db    0
+ROM:C2E8                 db  0Fh
+ROM:C2E9                 db  89h ; É
+ROM:C2EA                 db 0C4h ; -
+ROM:C2EB                 db  8Ah ; Ê
+ROM:C2EC                 db 0C4h ; -
+ROM:C2ED ay_out_buf:     db    0
+ROM:C2EE                 db    0
+ROM:C2EF                 db    0
+ROM:C2F0                 db    0
+ROM:C2F1                 db    0
+ROM:C2F2                 db    0
+ROM:C2F3 noise_generator_control_reg_buf:db 0    ; DATA XREF: manage_current_note_in_channel+3Aw
+ROM:C2F4 mixer_control_reg_buf:db 38h            ; DATA XREF: manage_current_note_in_channel+2Fr
+ROM:C2F4                                         ; manage_current_note_in_channel+34w ...
+ROM:C2F5                 db    0
+ROM:C2F6                 db    0
+ROM:C2F7                 db    0
+ROM:C2F8                 db    0
+ROM:C2F9                 db    0
+ROM:C2FA                 db    0
+ROM:C2FB                 db    0
+ROM:C2FC ay_registers_init_data:db    0
+ROM:C2FD                 db    0
+ROM:C2FE                 db    0
+ROM:C2FF                 db    0
+ROM:C300                 db    0
+ROM:C301                 db    0
+ROM:C302                 db    0
+ROM:C303                 db  38h ; 8
+ROM:C304                 db    0
+ROM:C305                 db    0
+ROM:C306                 db    0
+ROM:C307                 db    0
+ROM:C308                 db    0
+ROM:C309                 db    0
+ROM:C30A                 db    0
+ROM:C30B current_position_ptr:dw 0C5C0h          ; DATA XREF: init+3w
+ROM:C30B                                         ; ROM:C04Er ...
+ROM:C30D speed_counter:  db 5                    ; DATA XREF: init+Ew
+ROM:C30D                                         ; ROM:play_framer ...
+ROM:C30E speed:          db 7                    ; DATA XREF: init+13w
+ROM:C30E                                         ; ROM:C03Dr ...
+ROM:C30F current_note_ptr:dw 0C61Eh              ; DATA XREF: ROM:init_patternw
+ROM:C30F                                         ; ROM:C08Ar ...
+ROM:C311 instrument_set_ptr:dw 0C315h            ; DATA XREF: init+9w
+ROM:C311                                         ; ROM:C063w ...
+ROM:C313 instrument_table_for_positions:dw 0C331h
+ROM:C315                 dw 0C331h
+ROM:C317                 dw 0C351h
+ROM:C319                 dw 0C351h
+ROM:C31B                 dw 0C371h
+ROM:C31D                 dw 0C371h
+ROM:C31F                 dw 0C351h
+ROM:C321                 dw 0C351h
+ROM:C323                 dw 0C391h
+ROM:C325                 dw 0C391h
+ROM:C327                 dw 0C3D1h
+ROM:C329                 dw 0C391h
+ROM:C32B                 dw 0C391h
+ROM:C32D                 dw 0C3B1h
+ROM:C32F                 dw 0C3B1h
+ROM:C331 sample_table:   dw 0C431h
+ROM:C333                 dw 0C4D7h
+ROM:C335                 dw 0C433h
+ROM:C337                 dw 0C4C5h
+ROM:C339                 dw 0C471h
+ROM:C33B                 dw 0C49Fh
+ROM:C33D                 dw 0C45Fh
+ROM:C33F                 db  89h ; É
+ROM:C340                 db 0C4h ; -
+ROM:C341                 db  47h ; G
+ROM:C342                 db 0C4h ; -
+ROM:C343                 db 0D7h ; +
+ROM:C344                 db 0C4h ; -
+ROM:C345                 db    0
+ROM:C346                 db    0
+ROM:C347                 db    0
+ROM:C348                 db    0
+ROM:C349                 db    0
+ROM:C34A                 db    0
+ROM:C34B                 db    0
+ROM:C34C                 db    0
+ROM:C34D                 db    0
+ROM:C34E                 db    0
+ROM:C34F                 db    0
+ROM:C350                 db    0
+ROM:C351                 db  31h ; 1
+ROM:C352                 db 0C4h ; -
+ROM:C353                 db 0D7h ; +
+ROM:C354                 db 0C4h ; -
+ROM:C355                 db  33h ; 3
+ROM:C356                 db 0C4h ; -
+ROM:C357                 db 0C5h ; +
+ROM:C358                 db 0C4h ; -
+ROM:C359                 db  71h ; q
+ROM:C35A                 db 0C4h ; -
+ROM:C35B                 db  9Fh ; ß
+ROM:C35C                 db 0C4h ; -
+ROM:C35D                 db  33h ; 3
+ROM:C35E                 db 0C4h ; -
+ROM:C35F                 db  89h ; É
+ROM:C360                 db 0C4h ; -
+ROM:C361                 db  47h ; G
+ROM:C362                 db 0C4h ; -
+ROM:C363                 db 0AFh ; ï
+ROM:C364                 db 0C4h ; -
+ROM:C365                 db    0
+ROM:C366                 db    0
+ROM:C367                 db    0
+ROM:C368                 db    0
+ROM:C369                 db    0
+ROM:C36A                 db    0
+ROM:C36B                 db    0
+ROM:C36C                 db    0
+ROM:C36D                 db    0
+ROM:C36E                 db    0
+ROM:C36F                 db    0
+ROM:C370                 db    0
+ROM:C371                 db  31h ; 1
+ROM:C372                 db 0C4h ; -
+ROM:C373                 db 0D7h ; +
+ROM:C374                 db 0C4h ; -
+ROM:C375                 db  33h ; 3
+ROM:C376                 db 0C4h ; -
+ROM:C377                 db 0C5h ; +
+ROM:C378                 db 0C4h ; -
+ROM:C379                 db  71h ; q
+ROM:C37A                 db 0C4h ; -
+ROM:C37B                 db  9Fh ; ß
+ROM:C37C                 db 0C4h ; -
+ROM:C37D                 db 0E9h ; ù
+ROM:C37E                 db 0C4h ; -
+ROM:C37F                 db  89h ; É
+ROM:C380                 db 0C4h ; -
+ROM:C381                 db  47h ; G
+ROM:C382                 db 0C4h ; -
+ROM:C383                 db 0E9h ; ù
+ROM:C384                 db 0C4h ; -
+ROM:C385                 db    0
+ROM:C386                 db    0
+ROM:C387                 db    0
+ROM:C388                 db    0
+ROM:C389                 db    0
+ROM:C38A                 db    0
+ROM:C38B                 db    0
+ROM:C38C                 db    0
+ROM:C38D                 db    0
+ROM:C38E                 db    0
+ROM:C38F                 db    0
+ROM:C390                 db    0
+ROM:C391                 dw 0C431h
+ROM:C393                 dw 0C4D7h
+ROM:C395                 dw 0C433h
+ROM:C397                 dw 0C4C5h
+ROM:C399                 dw 0C471h
+ROM:C39B                 dw 0C49Fh
+ROM:C39D                 dw 0C4D7h
+ROM:C39F                 dw 0C489h
+ROM:C3A1                 dw 0C447h
+ROM:C3A3                 dw 0C433h
+ROM:C3A5                 db    0
+ROM:C3A6                 db    0
+ROM:C3A7                 db    0
+ROM:C3A8                 db    0
+ROM:C3A9                 db    0
+ROM:C3AA                 db    0
+ROM:C3AB                 db    0
+ROM:C3AC                 db    0
+ROM:C3AD                 db    0
+ROM:C3AE                 db    0
+ROM:C3AF                 db    0
+ROM:C3B0                 db    0
+ROM:C3B1                 db  31h ; 1
+ROM:C3B2                 db 0C4h ; -
+ROM:C3B3                 db 0D7h ; +
+ROM:C3B4                 db 0C4h ; -
+ROM:C3B5                 db  33h ; 3
+ROM:C3B6                 db 0C4h ; -
+ROM:C3B7                 db 0C5h ; +
+ROM:C3B8                 db 0C4h ; -
+ROM:C3B9                 db  71h ; q
+ROM:C3BA                 db 0C4h ; -
+ROM:C3BB                 db  9Fh ; ß
+ROM:C3BC                 db 0C4h ; -
+ROM:C3BD                 db  33h ; 3
+ROM:C3BE                 db 0C4h ; -
+ROM:C3BF                 db  89h ; É
+ROM:C3C0                 db 0C4h ; -
+ROM:C3C1                 db  47h ; G
+ROM:C3C2                 db 0C4h ; -
+ROM:C3C3                 db 0D7h ; +
+ROM:C3C4                 db 0C4h ; -
+ROM:C3C5                 db    0
+ROM:C3C6                 db    0
+ROM:C3C7                 db    0
+ROM:C3C8                 db    0
+ROM:C3C9                 db    0
+ROM:C3CA                 db    0
+ROM:C3CB                 db    0
+ROM:C3CC                 db    0
+ROM:C3CD                 db    0
+ROM:C3CE                 db    0
+ROM:C3CF                 db    0
+ROM:C3D0                 db    0
+ROM:C3D1                 db  31h ; 1
+ROM:C3D2                 db 0C4h ; -
+ROM:C3D3                 db 0D7h ; +
+ROM:C3D4                 db 0C4h ; -
+ROM:C3D5                 db  47h ; G
+ROM:C3D6                 db 0C4h ; -
+ROM:C3D7                 db 0C5h ; +
+ROM:C3D8                 db 0C4h ; -
+ROM:C3D9                 db  71h ; q
+ROM:C3DA                 db 0C4h ; -
+ROM:C3DB                 db  9Fh ; ß
+ROM:C3DC                 db 0C4h ; -
+ROM:C3DD                 db  5Fh ; _
+ROM:C3DE                 db 0C4h ; -
+ROM:C3DF                 db  89h ; É
+ROM:C3E0                 db 0C4h ; -
+ROM:C3E1                 db  47h ; G
+ROM:C3E2                 db 0C4h ; -
+ROM:C3E3                 db  33h ; 3
+ROM:C3E4                 db 0C4h ; -
+ROM:C3E5                 db    0
+ROM:C3E6                 db    0
+ROM:C3E7                 db    0
+ROM:C3E8                 db    0
+ROM:C3E9                 db    0
+ROM:C3EA                 db    0
+ROM:C3EB                 db    0
+ROM:C3EC                 db    0
+ROM:C3ED                 db    0
+ROM:C3EE                 db    0
+ROM:C3EF                 db    0
+ROM:C3F0                 db    0
+ROM:C3F1                 db  31h ; 1
+ROM:C3F2                 db 0C4h ; -
+ROM:C3F3                 db 0D7h ; +
+ROM:C3F4                 db 0C4h ; -
+ROM:C3F5                 db  33h ; 3
+ROM:C3F6                 db 0C4h ; -
+ROM:C3F7                 db 0C5h ; +
+ROM:C3F8                 db 0C4h ; -
+ROM:C3F9                 db  71h ; q
+ROM:C3FA                 db 0C4h ; -
+ROM:C3FB                 db  9Fh ; ß
+ROM:C3FC                 db 0C4h ; -
+ROM:C3FD                 db  5Fh ; _
+ROM:C3FE                 db 0C4h ; -
+ROM:C3FF                 db  89h ; É
+ROM:C400                 db 0C4h ; -
+ROM:C401                 db  47h ; G
+ROM:C402                 db 0C4h ; -
+ROM:C403                 db  33h ; 3
+ROM:C404                 db 0C4h ; -
+ROM:C405                 db    0
+ROM:C406                 db    0
+ROM:C407                 db    0
+ROM:C408                 db    0
+ROM:C409                 db    0
+ROM:C40A                 db    0
+ROM:C40B                 db    0
+ROM:C40C                 db    0
+ROM:C40D                 db    0
+ROM:C40E                 db    0
+ROM:C40F                 db    0
+ROM:C410                 db    0
+ROM:C411                 db  31h ; 1
+ROM:C412                 db 0C4h ; -
+ROM:C413                 db 0D7h ; +
+ROM:C414                 db 0C4h ; -
+ROM:C415                 db  33h ; 3
+ROM:C416                 db 0C4h ; -
+ROM:C417                 db 0C5h ; +
+ROM:C418                 db 0C4h ; -
+ROM:C419                 db  71h ; q
+ROM:C41A                 db 0C4h ; -
+ROM:C41B                 db  9Fh ; ß
+ROM:C41C                 db 0C4h ; -
+ROM:C41D                 db  5Fh ; _
+ROM:C41E                 db 0C4h ; -
+ROM:C41F                 db  89h ; É
+ROM:C420                 db 0C4h ; -
+ROM:C421                 db  47h ; G
+ROM:C422                 db 0C4h ; -
+ROM:C423                 db  33h ; 3
+ROM:C424                 db 0C4h ; -
+ROM:C425                 db    0
+ROM:C426                 db    0
+ROM:C427                 db    0
+ROM:C428                 db    0
+ROM:C429                 db    0
+ROM:C42A                 db    0
+ROM:C42B                 db    0
+ROM:C42C                 db    0
+ROM:C42D                 db    0
+ROM:C42E                 db    0
+ROM:C42F                 db    0
+ROM:C430                 db    0
+ROM:C431                 db    0
+ROM:C432                 db 0FFh
+ROM:C433                 db    1
+ROM:C434                 db    0
+ROM:C435                 db  0Dh
+ROM:C436                 db    1
+ROM:C437                 db  0Eh
+ROM:C438                 db  81h ; Á
+ROM:C439                 db  0Fh
+ROM:C43A                 db    2
+ROM:C43B                 db  0Eh
+ROM:C43C                 db  82h ; Â
+ROM:C43D                 db  0Dh
+ROM:C43E                 db    3
+ROM:C43F                 db  0Ch
+ROM:C440                 db  83h ; Ã
+ROM:C441                 db  0Bh
+ROM:C442                 db    0
+ROM:C443                 db  0Ah
+ROM:C444                 db    0
+ROM:C445                 db    8
+ROM:C446                 db 0FFh
+ROM:C447                 db    1
+ROM:C448                 db    0
+ROM:C449                 db  0Dh
+ROM:C44A                 db    1
+ROM:C44B                 db  0Eh
+ROM:C44C                 db    2
+ROM:C44D                 db  0Fh
+ROM:C44E                 db    0
+ROM:C44F                 db  0Fh
+ROM:C450                 db    1
+ROM:C451                 db  0Fh
+ROM:C452                 db    2
+ROM:C453                 db  0Fh
+ROM:C454                 db    3
+ROM:C455                 db  0Dh
+ROM:C456                 db    2
+ROM:C457                 db  0Ah
+ROM:C458                 db    1
+ROM:C459                 db    8
+ROM:C45A                 db    0
+ROM:C45B                 db    7
+ROM:C45C                 db    0
+ROM:C45D                 db    6
+ROM:C45E                 db 0FFh
+ROM:C45F                 db    0
+ROM:C460                 db    0
+ROM:C461                 db  0Fh
+ROM:C462                 db    0
+ROM:C463                 db  0Fh
+ROM:C464                 db  0Ch
+ROM:C465                 db  0Fh
+ROM:C466                 db  18h
+ROM:C467                 db  0Eh
+ROM:C468                 db    0
+ROM:C469                 db  0Dh
+ROM:C46A                 db  0Ch
+ROM:C46B                 db  0Ch
+ROM:C46C                 db  18h
+ROM:C46D                 db    8
+ROM:C46E                 db    0
+ROM:C46F                 db    0
+ROM:C470                 db 0FFh
+ROM:C471                 db    2
+ROM:C472                 db  46h ; F
+ROM:C473                 db  0Fh
+ROM:C474                 db  84h ; Ä
+ROM:C475                 db  0Fh
+ROM:C476                 db  3Ch ; <
+ROM:C477                 db  0Eh
+ROM:C478                 db  84h ; Ä
+ROM:C479                 db  0Dh
+ROM:C47A                 db  32h ; 2
+ROM:C47B                 db  0Dh
+ROM:C47C                 db  84h ; Ä
+ROM:C47D                 db  0Dh
+ROM:C47E                 db  28h ; (
+ROM:C47F                 db  0Ch
+ROM:C480                 db  1Eh
+ROM:C481                 db  0Ch
+ROM:C482                 db  14h
+ROM:C483                 db  0Bh
+ROM:C484                 db  0Ah
+ROM:C485                 db    8
+ROM:C486                 db    0
+ROM:C487                 db    0
+ROM:C488                 db 0FFh
+ROM:C489                 db    0
+ROM:C48A                 db 0FFh
+ROM:C48B                 db    2
+ROM:C48C                 db  88h ; È
+ROM:C48D                 db  0Fh
+ROM:C48E                 db  86h ; Æ
+ROM:C48F                 db  0Fh
+ROM:C490                 db  84h ; Ä
+ROM:C491                 db  0Eh
+ROM:C492                 db  82h ; Â
+ROM:C493                 db  0Eh
+ROM:C494                 db  82h ; Â
+ROM:C495                 db  0Dh
+ROM:C496                 db  1Dh
+ROM:C497                 db  0Dh
+ROM:C498                 db  81h ; Á
+ROM:C499                 db  0Ch
+ROM:C49A                 db  80h ; À
+ROM:C49B                 db  0Ah
+ROM:C49C                 db    0
+ROM:C49D                 db    0
+ROM:C49E                 db 0FFh
+ROM:C49F                 db    2
+ROM:C4A0                 db  3Ch ; <
+ROM:C4A1                 db  0Fh
+ROM:C4A2                 db  32h ; 2
+ROM:C4A3                 db  0Fh
+ROM:C4A4                 db  28h ; (
+ROM:C4A5                 db  0Eh
+ROM:C4A6                 db  1Eh
+ROM:C4A7                 db  0Dh
+ROM:C4A8                 db  14h
+ROM:C4A9                 db  0Bh
+ROM:C4AA                 db  0Ah
+ROM:C4AB                 db    8
+ROM:C4AC                 db    0
+ROM:C4AD                 db    0
+ROM:C4AE                 db 0FFh
+ROM:C4AF                 db    1
+ROM:C4B0                 db    0
+ROM:C4B1                 db  0Fh
+ROM:C4B2                 db  0Ch
+ROM:C4B3                 db  0Fh
+ROM:C4B4                 db    0
+ROM:C4B5                 db  0Eh
+ROM:C4B6                 db  0Ch
+ROM:C4B7                 db  0Dh
+ROM:C4B8                 db    0
+ROM:C4B9                 db  0Ch
+ROM:C4BA                 db  0Ch
+ROM:C4BB                 db  0Ah
+ROM:C4BC                 db    0
+ROM:C4BD                 db    8
+ROM:C4BE                 db  18h
+ROM:C4BF                 db    6
+ROM:C4C0                 db    0
+ROM:C4C1                 db    4
+ROM:C4C2                 db  18h
+ROM:C4C3                 db    2
+ROM:C4C4                 db 0FFh
+ROM:C4C5                 db    1
+ROM:C4C6                 db    0
+ROM:C4C7                 db  0Dh
+ROM:C4C8                 db    2
+ROM:C4C9                 db  0Eh
+ROM:C4CA                 db    4
+ROM:C4CB                 db  0Fh
+ROM:C4CC                 db    8
+ROM:C4CD                 db  0Fh
+ROM:C4CE                 db  0Ah
+ROM:C4CF                 db  0Eh
+ROM:C4D0                 db  0Ch
+ROM:C4D1                 db  0Dh
+ROM:C4D2                 db  0Eh
+ROM:C4D3                 db    8
+ROM:C4D4                 db    0
+ROM:C4D5                 db    8
+ROM:C4D6                 db 0FFh
+ROM:C4D7                 db    0
+ROM:C4D8                 db    0
+ROM:C4D9                 db  0Fh
+ROM:C4DA                 db  0Ch
+ROM:C4DB                 db  0Fh
+ROM:C4DC                 db    0
+ROM:C4DD                 db  0Eh
+ROM:C4DE                 db  0Ch
+ROM:C4DF                 db  0Eh
+ROM:C4E0                 db    0
+ROM:C4E1                 db  0Dh
+ROM:C4E2                 db  0Ch
+ROM:C4E3                 db  0Ch
+ROM:C4E4                 db    0
+ROM:C4E5                 db    8
+ROM:C4E6                 db    0
+ROM:C4E7                 db    0
+ROM:C4E8                 db 0FFh
+ROM:C4E9                 db    0
+ROM:C4EA                 db    0
+ROM:C4EB                 db  0Fh
+ROM:C4EC                 db  0Ch
+ROM:C4ED                 db  0Fh
+ROM:C4EE                 db  18h
+ROM:C4EF                 db  0Eh
+ROM:C4F0                 db    0
+ROM:C4F1                 db  0Eh
+ROM:C4F2                 db  0Ch
+ROM:C4F3                 db  0Dh
+ROM:C4F4                 db  18h
+ROM:C4F5                 db  0Ch
+ROM:C4F6                 db    0
+ROM:C4F7                 db    8
+ROM:C4F8                 db 0FFh
+ROM:C4F9 note_period_table:dw 0
+ROM:C4FB                 dw 0E29h
+ROM:C4FD                 dw 0D5Dh
+ROM:C4FF                 dw 0C9Ch
+ROM:C501                 dw 0BE7h
+ROM:C503                 dw 0B3Ch
+ROM:C505                 dw 0A9Bh
+ROM:C507                 dw 0A02h
+ROM:C509                 db  73h ; s
+ROM:C50A                 db    9
+ROM:C50B                 db 0EBh ; û
+ROM:C50C                 db    8
+ROM:C50D                 db  6Bh ; k
+ROM:C50E                 db    8
+ROM:C50F                 db 0F2h ; ª
+ROM:C510                 db    7
+ROM:C511                 db  80h ; À
+ROM:C512                 db    7
+ROM:C513                 db  14h
+ROM:C514                 db    7
+ROM:C515                 db 0AEh ; î
+ROM:C516                 db    6
+ROM:C517                 db  4Eh ; N
+ROM:C518                 db    6
+ROM:C519                 db 0F4h ; ¯
+ROM:C51A                 db    5
+ROM:C51B                 db  9Eh ; Þ
+ROM:C51C                 db    5
+ROM:C51D                 db  4Dh ; M
+ROM:C51E                 db    5
+ROM:C51F                 db    1
+ROM:C520                 db    5
+ROM:C521                 db 0B9h ; ¦
+ROM:C522                 db    4
+ROM:C523                 db  75h ; u
+ROM:C524                 db    4
+ROM:C525                 db  35h ; 5
+ROM:C526                 db    4
+ROM:C527                 db 0F9h ; •
+ROM:C528                 db    3
+ROM:C529                 db 0C0h ; L
+ROM:C52A                 db    3
+ROM:C52B                 db  8Ah ; Ê
+ROM:C52C                 db    3
+ROM:C52D                 db  57h ; W
+ROM:C52E                 db    3
+ROM:C52F                 db  27h ; '
+ROM:C530                 dw 0FA03h
+ROM:C532                 dw 0CF02h
+ROM:C534                 dw 0A702h
+ROM:C536                 dw 8102h
+ROM:C538                 dw 5D02h
+ROM:C53A                 dw 3B02h
+ROM:C53C                 db    2
+ROM:C53D                 db  1Bh
+ROM:C53E                 db    2
+ROM:C53F                 db 0FCh ; ¹
+ROM:C540                 db    1
+ROM:C541                 db 0E0h ; ð
+ROM:C542                 db    1
+ROM:C543                 db 0C5h ; +
+ROM:C544                 db    1
+ROM:C545                 db 0ACh ; ì
+ROM:C546                 db    1
+ROM:C547                 db  94h ; Ô
+ROM:C548                 db    1
+ROM:C549                 db  7Dh ; }
+ROM:C54A                 db    1
+ROM:C54B                 db  68h ; h
+ROM:C54C                 db    1
+ROM:C54D                 db  53h ; S
+ROM:C54E                 db    1
+ROM:C54F                 db  40h ; @
+ROM:C550                 db    1
+ROM:C551                 db  2Eh ; .
+ROM:C552                 db    1
+ROM:C553                 db  1Dh
+ROM:C554                 db    1
+ROM:C555                 db  0Dh
+ROM:C556                 db    1
+ROM:C557                 db 0FEh ; ¦
+ROM:C558                 db    0
+ROM:C559                 db 0F0h ; ¨
+ROM:C55A                 db    0
+ROM:C55B                 db 0E2h ; ò
+ROM:C55C                 db    0
+ROM:C55D                 db 0D6h ; ã
+ROM:C55E                 db    0
+ROM:C55F                 db 0CAh ; ¦
+ROM:C560                 db    0
+ROM:C561                 db 0BEh ; -
+ROM:C562                 db    0
+ROM:C563                 db 0B4h ; +
+ROM:C564                 db    0
+ROM:C565                 db 0AAh ; ê
+ROM:C566                 db    0
+ROM:C567                 db 0A0h ; à
+ROM:C568                 db    0
+ROM:C569                 db  97h ; ×
+ROM:C56A                 db    0
+ROM:C56B                 db  8Fh ; Ï
+ROM:C56C                 db    0
+ROM:C56D                 db  87h ; Ç
+ROM:C56E                 db    0
+ROM:C56F                 db  7Fh ; 
+ROM:C570                 db    0
+ROM:C571                 db  78h ; x
+ROM:C572                 db    0
+ROM:C573                 db  71h ; q
+ROM:C574                 db    0
+ROM:C575                 db  6Bh ; k
+ROM:C576                 db    0
+ROM:C577                 db  65h ; e
+ROM:C578                 db    0
+ROM:C579                 db  5Fh ; _
+ROM:C57A                 db    0
+ROM:C57B                 db  5Ah ; Z
+ROM:C57C                 db    0
+ROM:C57D                 db  55h ; U
+ROM:C57E                 db    0
+ROM:C57F                 db  50h ; P
+ROM:C580                 db    0
+ROM:C581                 db  4Ch ; L
+ROM:C582                 db    0
+ROM:C583                 db  47h ; G
+ROM:C584                 db    0
+ROM:C585                 db  43h ; C
+ROM:C586                 db    0
+ROM:C587                 db  40h ; @
+ROM:C588                 db    0
+ROM:C589                 db  3Ch ; <
+ROM:C58A                 db    0
+ROM:C58B                 db  39h ; 9
+ROM:C58C                 db    0
+ROM:C58D                 db  35h ; 5
+ROM:C58E                 db    0
+ROM:C58F                 db  32h ; 2
+ROM:C590                 db    0
+ROM:C591                 db  30h ; 0
+ROM:C592                 db    0
+ROM:C593                 db  2Dh ; -
+ROM:C594                 db    0
+ROM:C595                 db  2Ah ; *
+ROM:C596                 db    0
+ROM:C597                 db  28h ; (
+ROM:C598                 db    0
+ROM:C599                 db  26h ; &
+ROM:C59A                 db    0
+ROM:C59B                 db  24h ; $
+ROM:C59C                 db    0
+ROM:C59D                 db  22h ; "
+ROM:C59E                 db    0
+ROM:C59F                 db  20h
+ROM:C5A0                 db    0
+ROM:C5A1                 db  1Eh
+ROM:C5A2                 db    0
+ROM:C5A3                 db  1Ch
+ROM:C5A4                 db    0
+ROM:C5A5                 db  1Bh
+ROM:C5A6                 db    0
+ROM:C5A7                 db  19h
+ROM:C5A8                 db    0
+ROM:C5A9                 db  18h
+ROM:C5AA                 db    0
+ROM:C5AB                 db  16h
+ROM:C5AC                 db    0
+ROM:C5AD                 db  15h
+ROM:C5AE                 db    0
+ROM:C5AF                 db  14h
+ROM:C5B0                 db    0
+ROM:C5B1                 db  13h
+ROM:C5B2                 db    0
+ROM:C5B3                 db  12h
+ROM:C5B4                 db    0
+ROM:C5B5                 db  11h
+ROM:C5B6                 db    0
+ROM:C5B7                 db  10h
+ROM:C5B8                 db    0
+ROM:C5B9                 db  0Fh
+ROM:C5BA                 db    0
+ROM:C5BB                 db    0
+ROM:C5BC                 db  46h ; F
+ROM:C5BD                 db 0D5h ; -
+ROM:C5BE position_table: dw 0C5FEh               ; DATA XREF: inito
+ROM:C5C0                 dw 0C702h
+ROM:C5C2                 dw 0C825h
+ROM:C5C4                 dw 0C825h
+ROM:C5C6                 dw 0C948h
+ROM:C5C8                 dw 0C948h
+ROM:C5CA                 dw 0C825h
+ROM:C5CC                 dw 0C825h
+ROM:C5CE                 dw 0CA6Bh
+ROM:C5D0                 dw 0CA6Bh
+ROM:C5D2                 dw 0CB8Eh
+ROM:C5D4                 dw 0CCB3h
+ROM:C5D6                 dw 0CCB3h
+ROM:C5D8                 dw 0CDD6h
+ROM:C5DA                 dw 0D11Fh
+ROM:C5DC                 dw 0FFFFh
+ROM:C5DE                 db    0
+ROM:C5DF                 db    0
+ROM:C5E0                 db    0
+ROM:C5E1                 db    0
+ROM:C5E2                 db    0
+ROM:C5E3                 db    0
+ROM:C5E4                 db    0
+ROM:C5E5                 db    0
+ROM:C5E6                 db    0
+ROM:C5E7                 db    0
+ROM:C5E8                 db    0
+ROM:C5E9                 db    0
+ROM:C5EA                 db    0
+ROM:C5EB                 db    0
+ROM:C5EC                 db    0
+ROM:C5ED                 db    0
+ROM:C5EE                 db    0
+ROM:C5EF                 db    0
+ROM:C5F0                 db    0
+ROM:C5F1                 db    0
+ROM:C5F2                 db    0
+ROM:C5F3                 db    0
+ROM:C5F4                 db    0
+ROM:C5F5                 db    0
+ROM:C5F6                 db    0
+ROM:C5F7                 db    0
+ROM:C5F8                 db    0
+ROM:C5F9                 db    0
+ROM:C5FA                 db    0
+ROM:C5FB                 db    0
+ROM:C5FC                 db    0
+ROM:C5FD                 db    0
+ROM:C5FE                 db  81h ; Á
+ROM:C5FF                 db 0A7h ; ç
+ROM:C600                 db  41h ; A
+ROM:C601                 db  82h ; Â
+ROM:C602                 db  19h
+ROM:C603                 db  87h ; Ç
+ROM:C604                 db  18h
+ROM:C605                 db    0
+ROM:C606                 db  3Dh ; =
+ROM:C607                 db    0
+ROM:C608                 db    0
+ROM:C609                 db    0
+ROM:C60A                 db  3Fh ; ?
+ROM:C60B                 db  19h
+ROM:C60C                 db    0
+ROM:C60D                 db    0
+ROM:C60E                 db  3Dh ; =
+ROM:C60F                 db    0
+ROM:C610                 db    0
+ROM:C611                 db    0
+ROM:C612                 db    0
+ROM:C613                 db  19h
+ROM:C614                 db  18h
+ROM:C615                 db    0
+ROM:C616                 db  38h ; 8
+ROM:C617                 db  19h
+ROM:C618                 db    0
+ROM:C619                 db    0
+ROM:C61A                 db  3Ah ; :
+ROM:C61B                 db    0
+ROM:C61C                 db    0
+ROM:C61D                 db    0
+ROM:C61E                 db  3Dh ; =
+ROM:C61F                 db  19h
+ROM:C620                 db    0
+ROM:C621                 db    0
+ROM:C622                 db  41h ; A
+ROM:C623                 db    0
+ROM:C624                 db  18h
+ROM:C625                 db    0
+ROM:C626                 db  3Dh ; =
+ROM:C627                 db  19h
+ROM:C628                 db    0
+ROM:C629                 db    0
+ROM:C62A                 db  3Fh ; ?
+ROM:C62B                 db    0
+ROM:C62C                 db    0
+ROM:C62D                 db    0
+ROM:C62E                 db  3Dh ; =
+ROM:C62F                 db  19h
+ROM:C630                 db  18h
+ROM:C631                 db    0
+ROM:C632                 db    0
+ROM:C633                 db  19h
+ROM:C634                 db    0
+ROM:C635                 db    0
+ROM:C636                 db  38h ; 8
+ROM:C637                 db    0
+ROM:C638                 db  18h
+ROM:C639                 db    0
+ROM:C63A                 db  3Ah ; :
+ROM:C63B                 db  18h
+ROM:C63C                 db  18h
+ROM:C63D                 db    0
+ROM:C63E                 db  3Dh ; =
+ROM:C63F                 db    0
+ROM:C640                 db    0
+ROM:C641                 db    0
+ROM:C642                 db  41h ; A
+ROM:C643                 db  16h
+ROM:C644                 db  18h
+ROM:C645                 db    0
+ROM:C646                 db  3Dh ; =
+ROM:C647                 db    0
+ROM:C648                 db    0
+ROM:C649                 db    0
+ROM:C64A                 db  3Fh ; ?
+ROM:C64B                 db  16h
+ROM:C64C                 db    0
+ROM:C64D                 db    0
+ROM:C64E                 db  3Dh ; =
+ROM:C64F                 db    0
+ROM:C650                 db    0
+ROM:C651                 db    0
+ROM:C652                 db    0
+ROM:C653                 db  16h
+ROM:C654                 db  18h
+ROM:C655                 db    0
+ROM:C656                 db  38h ; 8
+ROM:C657                 db  16h
+ROM:C658                 db    0
+ROM:C659                 db    0
+ROM:C65A                 db  3Ah ; :
+ROM:C65B                 db    0
+ROM:C65C                 db    0
+ROM:C65D                 db    0
+ROM:C65E                 db  3Dh ; =
+ROM:C65F                 db  16h
+ROM:C660                 db    0
+ROM:C661                 db    0
+ROM:C662                 db  41h ; A
+ROM:C663                 db    0
+ROM:C664                 db  18h
+ROM:C665                 db    0
+ROM:C666                 db  3Dh ; =
+ROM:C667                 db  16h
+ROM:C668                 db    0
+ROM:C669                 db    0
+ROM:C66A                 db  3Fh ; ?
+ROM:C66B                 db    0
+ROM:C66C                 db    0
+ROM:C66D                 db    0
+ROM:C66E                 db  3Dh ; =
+ROM:C66F                 db  16h
+ROM:C670                 db  18h
+ROM:C671                 db    0
+ROM:C672                 db    0
+ROM:C673                 db  16h
+ROM:C674                 db    0
+ROM:C675                 db    0
+ROM:C676                 db  38h ; 8
+ROM:C677                 db    0
+ROM:C678                 db  18h
+ROM:C679                 db    0
+ROM:C67A                 db  3Ah ; :
+ROM:C67B                 db  14h
+ROM:C67C                 db  18h
+ROM:C67D                 db    0
+ROM:C67E                 db  3Dh ; =
+ROM:C67F                 db    0
+ROM:C680                 db    0
+ROM:C681                 db    0
+ROM:C682                 db  41h ; A
+ROM:C683                 db  12h
+ROM:C684                 db  18h
+ROM:C685                 db    0
+ROM:C686                 db  3Dh ; =
+ROM:C687                 db    0
+ROM:C688                 db    0
+ROM:C689                 db    0
+ROM:C68A                 db  3Fh ; ?
+ROM:C68B                 db  12h
+ROM:C68C                 db    0
+ROM:C68D                 db    0
+ROM:C68E                 db  3Dh ; =
+ROM:C68F                 db    0
+ROM:C690                 db    0
+ROM:C691                 db    0
+ROM:C692                 db    0
+ROM:C693                 db  12h
+ROM:C694                 db  18h
+ROM:C695                 db    0
+ROM:C696                 db  38h ; 8
+ROM:C697                 db  12h
+ROM:C698                 db    0
+ROM:C699                 db    0
+ROM:C69A                 db  3Ah ; :
+ROM:C69B                 db    0
+ROM:C69C                 db    0
+ROM:C69D                 db    0
+ROM:C69E                 db  3Dh ; =
+ROM:C69F                 db  12h
+ROM:C6A0                 db    0
+ROM:C6A1                 db    0
+ROM:C6A2                 db  41h ; A
+ROM:C6A3                 db    0
+ROM:C6A4                 db  18h
+ROM:C6A5                 db    0
+ROM:C6A6                 db  3Dh ; =
+ROM:C6A7                 db  12h
+ROM:C6A8                 db    0
+ROM:C6A9                 db    0
+ROM:C6AA                 db  3Fh ; ?
+ROM:C6AB                 db    0
+ROM:C6AC                 db    0
+ROM:C6AD                 db    0
+ROM:C6AE                 db  3Dh ; =
+ROM:C6AF                 db  12h
+ROM:C6B0                 db  18h
+ROM:C6B1                 db    0
+ROM:C6B2                 db    0
+ROM:C6B3                 db  12h
+ROM:C6B4                 db    0
+ROM:C6B5                 db    0
+ROM:C6B6                 db  38h ; 8
+ROM:C6B7                 db  12h
+ROM:C6B8                 db  18h
+ROM:C6B9                 db    0
+ROM:C6BA                 db  3Ah ; :
+ROM:C6BB                 db  11h
+ROM:C6BC                 db  18h
+ROM:C6BD                 db    0
+ROM:C6BE                 db  3Dh ; =
+ROM:C6BF                 db  12h
+ROM:C6C0                 db    0
+ROM:C6C1                 db    0
+ROM:C6C2                 db  41h ; A
+ROM:C6C3                 db  14h
+ROM:C6C4                 db  18h
+ROM:C6C5                 db    0
+ROM:C6C6                 db  3Dh ; =
+ROM:C6C7                 db    0
+ROM:C6C8                 db    0
+ROM:C6C9                 db    0
+ROM:C6CA                 db  3Fh ; ?
+ROM:C6CB                 db  14h
+ROM:C6CC                 db    0
+ROM:C6CD                 db    0
+ROM:C6CE                 db  3Dh ; =
+ROM:C6CF                 db    0
+ROM:C6D0                 db    0
+ROM:C6D1                 db    0
+ROM:C6D2                 db    0
+ROM:C6D3                 db  14h
+ROM:C6D4                 db  18h
+ROM:C6D5                 db    0
+ROM:C6D6                 db  38h ; 8
+ROM:C6D7                 db  14h
+ROM:C6D8                 db    0
+ROM:C6D9                 db    0
+ROM:C6DA                 db  3Ah ; :
+ROM:C6DB                 db    0
+ROM:C6DC                 db    0
+ROM:C6DD                 db    0
+ROM:C6DE                 db  3Dh ; =
+ROM:C6DF                 db  14h
+ROM:C6E0                 db    0
+ROM:C6E1                 db    0
+ROM:C6E2                 db  41h ; A
+ROM:C6E3                 db    0
+ROM:C6E4                 db  18h
+ROM:C6E5                 db    0
+ROM:C6E6                 db  3Dh ; =
+ROM:C6E7                 db  14h
+ROM:C6E8                 db    0
+ROM:C6E9                 db    0
+ROM:C6EA                 db  3Fh ; ?
+ROM:C6EB                 db  14h
+ROM:C6EC                 db    0
+ROM:C6ED                 db    0
+ROM:C6EE                 db  3Dh ; =
+ROM:C6EF                 db    0
+ROM:C6F0                 db  18h
+ROM:C6F1                 db    0
+ROM:C6F2                 db    0
+ROM:C6F3                 db  16h
+ROM:C6F4                 db    0
+ROM:C6F5                 db    0
+ROM:C6F6                 db  38h ; 8
+ROM:C6F7                 db    0
+ROM:C6F8                 db  18h
+ROM:C6F9                 db    0
+ROM:C6FA                 db  3Ah ; :
+ROM:C6FB                 db  18h
+ROM:C6FC                 db  18h
+ROM:C6FD                 db    0
+ROM:C6FE                 db  3Dh ; =
+ROM:C6FF                 db    0
+ROM:C700                 db    0
+ROM:C701                 db    0
+ROM:C702                 db  81h ; Á
+ROM:C703                 db  41h ; A
+ROM:C704                 db  82h ; Â
+ROM:C705                 db  19h
+ROM:C706                 db  85h ; Å
+ROM:C707                 db  0Ch
+ROM:C708                 db  87h ; Ç
+ROM:C709                 db  18h
+ROM:C70A                 db  3Dh ; =
+ROM:C70B                 db    0
+ROM:C70C                 db    0
+ROM:C70D                 db    0
+ROM:C70E                 db  3Fh ; ?
+ROM:C70F                 db  19h
+ROM:C710                 db  84h ; Ä
+ROM:C711                 db  18h
+ROM:C712                 db  18h
+ROM:C713                 db  3Dh ; =
+ROM:C714                 db    0
+ROM:C715                 db    0
+ROM:C716                 db    0
+ROM:C717                 db    0
+ROM:C718                 db  19h
+ROM:C719                 db  85h ; Å
+ROM:C71A                 db  0Ch
+ROM:C71B                 db  18h
+ROM:C71C                 db  38h ; 8
+ROM:C71D                 db  19h
+ROM:C71E                 db    0
+ROM:C71F                 db    0
+ROM:C720                 db  3Ah ; :
+ROM:C721                 db    0
+ROM:C722                 db  84h ; Ä
+ROM:C723                 db  18h
+ROM:C724                 db    0
+ROM:C725                 db  3Dh ; =
+ROM:C726                 db  19h
+ROM:C727                 db  85h ; Å
+ROM:C728                 db  0Ch
+ROM:C729                 db  18h
+ROM:C72A                 db  41h ; A
+ROM:C72B                 db    0
+ROM:C72C                 db    0
+ROM:C72D                 db    0
+ROM:C72E                 db  3Dh ; =
+ROM:C72F                 db  19h
+ROM:C730                 db  0Ch
+ROM:C731                 db  18h
+ROM:C732                 db  3Fh ; ?
+ROM:C733                 db    0
+ROM:C734                 db  84h ; Ä
+ROM:C735                 db  18h
+ROM:C736                 db  18h
+ROM:C737                 db  3Dh ; =
+ROM:C738                 db  19h
+ROM:C739                 db    0
+ROM:C73A                 db    0
+ROM:C73B                 db    0
+ROM:C73C                 db  19h
+ROM:C73D                 db  85h ; Å
+ROM:C73E                 db  0Ch
+ROM:C73F                 db  18h
+ROM:C740                 db  38h ; 8
+ROM:C741                 db    0
+ROM:C742                 db  0Ch
+ROM:C743                 db  18h
+ROM:C744                 db  3Ah ; :
+ROM:C745                 db  18h
+ROM:C746                 db  84h ; Ä
+ROM:C747                 db  18h
+ROM:C748                 db  18h
+ROM:C749                 db  3Dh ; =
+ROM:C74A                 db    0
+ROM:C74B                 db    0
+ROM:C74C                 db    0
+ROM:C74D                 db  41h ; A
+ROM:C74E                 db  16h
+ROM:C74F                 db  85h ; Å
+ROM:C750                 db  0Ch
+ROM:C751                 db  18h
+ROM:C752                 db  3Dh ; =
+ROM:C753                 db    0
+ROM:C754                 db    0
+ROM:C755                 db    0
+ROM:C756                 db  3Fh ; ?
+ROM:C757                 db  16h
+ROM:C758                 db  84h ; Ä
+ROM:C759                 db  18h
+ROM:C75A                 db  18h
+ROM:C75B                 db  3Dh ; =
+ROM:C75C                 db    0
+ROM:C75D                 db    0
+ROM:C75E                 db    0
+ROM:C75F                 db    0
+ROM:C760                 db  16h
+ROM:C761                 db  85h ; Å
+ROM:C762                 db  0Ch
+ROM:C763                 db  18h
+ROM:C764                 db  38h ; 8
+ROM:C765                 db  16h
+ROM:C766                 db    0
+ROM:C767                 db    0
+ROM:C768                 db  3Ah ; :
+ROM:C769                 db    0
+ROM:C76A                 db  84h ; Ä
+ROM:C76B                 db  18h
+ROM:C76C                 db    0
+ROM:C76D                 db  3Dh ; =
+ROM:C76E                 db  16h
+ROM:C76F                 db  85h ; Å
+ROM:C770                 db  0Ch
+ROM:C771                 db  18h
+ROM:C772                 db  41h ; A
+ROM:C773                 db    0
+ROM:C774                 db    0
+ROM:C775                 db    0
+ROM:C776                 db  3Dh ; =
+ROM:C777                 db  16h
+ROM:C778                 db  0Ch
+ROM:C779                 db  18h
+ROM:C77A                 db  3Fh ; ?
+ROM:C77B                 db    0
+ROM:C77C                 db  84h ; Ä
+ROM:C77D                 db  18h
+ROM:C77E                 db  18h
+ROM:C77F                 db  3Dh ; =
+ROM:C780                 db  16h
+ROM:C781                 db    0
+ROM:C782                 db    0
+ROM:C783                 db    0
+ROM:C784                 db  16h
+ROM:C785                 db  85h ; Å
+ROM:C786                 db  0Ch
+ROM:C787                 db  18h
+ROM:C788                 db  38h ; 8
+ROM:C789                 db    0
+ROM:C78A                 db  0Ch
+ROM:C78B                 db  18h
+ROM:C78C                 db  3Ah ; :
+ROM:C78D                 db  14h
+ROM:C78E                 db  84h ; Ä
+ROM:C78F                 db  18h
+ROM:C790                 db  18h
+ROM:C791                 db  3Dh ; =
+ROM:C792                 db    0
+ROM:C793                 db    0
+ROM:C794                 db    0
+ROM:C795                 db  41h ; A
+ROM:C796                 db  12h
+ROM:C797                 db  85h ; Å
+ROM:C798                 db  0Ch
+ROM:C799                 db  18h
+ROM:C79A                 db  3Dh ; =
+ROM:C79B                 db    0
+ROM:C79C                 db    0
+ROM:C79D                 db    0
+ROM:C79E                 db  3Fh ; ?
+ROM:C79F                 db  12h
+ROM:C7A0                 db  84h ; Ä
+ROM:C7A1                 db  18h
+ROM:C7A2                 db  18h
+ROM:C7A3                 db  3Dh ; =
+ROM:C7A4                 db    0
+ROM:C7A5                 db    0
+ROM:C7A6                 db    0
+ROM:C7A7                 db    0
+ROM:C7A8                 db  12h
+ROM:C7A9                 db  85h ; Å
+ROM:C7AA                 db  0Ch
+ROM:C7AB                 db  18h
+ROM:C7AC                 db  38h ; 8
+ROM:C7AD                 db  12h
+ROM:C7AE                 db    0
+ROM:C7AF                 db    0
+ROM:C7B0                 db  3Ah ; :
+ROM:C7B1                 db    0
+ROM:C7B2                 db  84h ; Ä
+ROM:C7B3                 db  18h
+ROM:C7B4                 db    0
+ROM:C7B5                 db  3Dh ; =
+ROM:C7B6                 db  12h
+ROM:C7B7                 db  85h ; Å
+ROM:C7B8                 db  0Ch
+ROM:C7B9                 db  18h
+ROM:C7BA                 db  41h ; A
+ROM:C7BB                 db    0
+ROM:C7BC                 db    0
+ROM:C7BD                 db    0
+ROM:C7BE                 db  3Dh ; =
+ROM:C7BF                 db  12h
+ROM:C7C0                 db  0Ch
+ROM:C7C1                 db  18h
+ROM:C7C2                 db  3Fh ; ?
+ROM:C7C3                 db    0
+ROM:C7C4                 db  84h ; Ä
+ROM:C7C5                 db  18h
+ROM:C7C6                 db  18h
+ROM:C7C7                 db  3Dh ; =
+ROM:C7C8                 db  12h
+ROM:C7C9                 db    0
+ROM:C7CA                 db    0
+ROM:C7CB                 db    0
+ROM:C7CC                 db  12h
+ROM:C7CD                 db  85h ; Å
+ROM:C7CE                 db  0Ch
+ROM:C7CF                 db  18h
+ROM:C7D0                 db  38h ; 8
+ROM:C7D1                 db  12h
+ROM:C7D2                 db  0Ch
+ROM:C7D3                 db  18h
+ROM:C7D4                 db  3Ah ; :
+ROM:C7D5                 db  11h
+ROM:C7D6                 db  84h ; Ä
+ROM:C7D7                 db  18h
+ROM:C7D8                 db  18h
+ROM:C7D9                 db  3Dh ; =
+ROM:C7DA                 db  12h
+ROM:C7DB                 db    0
+ROM:C7DC                 db    0
+ROM:C7DD                 db  41h ; A
+ROM:C7DE                 db  14h
+ROM:C7DF                 db  85h ; Å
+ROM:C7E0                 db  0Ch
+ROM:C7E1                 db  18h
+ROM:C7E2                 db  3Dh ; =
+ROM:C7E3                 db    0
+ROM:C7E4                 db    0
+ROM:C7E5                 db    0
+ROM:C7E6                 db  3Fh ; ?
+ROM:C7E7                 db  14h
+ROM:C7E8                 db  84h ; Ä
+ROM:C7E9                 db  18h
+ROM:C7EA                 db  18h
+ROM:C7EB                 db  3Dh ; =
+ROM:C7EC                 db    0
+ROM:C7ED                 db    0
+ROM:C7EE                 db    0
+ROM:C7EF                 db    0
+ROM:C7F0                 db  14h
+ROM:C7F1                 db  85h ; Å
+ROM:C7F2                 db  0Ch
+ROM:C7F3                 db  18h
+ROM:C7F4                 db  38h ; 8
+ROM:C7F5                 db  14h
+ROM:C7F6                 db    0
+ROM:C7F7                 db    0
+ROM:C7F8                 db  3Ah ; :
+ROM:C7F9                 db    0
+ROM:C7FA                 db  84h ; Ä
+ROM:C7FB                 db  18h
+ROM:C7FC                 db    0
+ROM:C7FD                 db  3Dh ; =
+ROM:C7FE                 db  14h
+ROM:C7FF                 db  85h ; Å
+ROM:C800                 db  0Ch
+ROM:C801                 db  18h
+ROM:C802                 db  41h ; A
+ROM:C803                 db    0
+ROM:C804                 db    0
+ROM:C805                 db    0
+ROM:C806                 db  3Dh ; =
+ROM:C807                 db  14h
+ROM:C808                 db  0Ch
+ROM:C809                 db  18h
+ROM:C80A                 db  3Fh ; ?
+ROM:C80B                 db  14h
+ROM:C80C                 db  84h ; Ä
+ROM:C80D                 db  18h
+ROM:C80E                 db  18h
+ROM:C80F                 db  3Dh ; =
+ROM:C810                 db    0
+ROM:C811                 db    0
+ROM:C812                 db    0
+ROM:C813                 db    0
+ROM:C814                 db  16h
+ROM:C815                 db  85h ; Å
+ROM:C816                 db  0Ch
+ROM:C817                 db  18h
+ROM:C818                 db  38h ; 8
+ROM:C819                 db    0
+ROM:C81A                 db  0Ch
+ROM:C81B                 db  18h
+ROM:C81C                 db  3Ah ; :
+ROM:C81D                 db  18h
+ROM:C81E                 db  84h ; Ä
+ROM:C81F                 db  18h
+ROM:C820                 db  18h
+ROM:C821                 db  3Dh ; =
+ROM:C822                 db    0
+ROM:C823                 db    0
+ROM:C824                 db    0
+ROM:C825                 db  86h ; Æ
+ROM:C826                 db  35h ; 5
+ROM:C827                 db  82h ; Â
+ROM:C828                 db  19h
+ROM:C829                 db  85h ; Å
+ROM:C82A                 db  18h
+ROM:C82B                 db  87h ; Ç
+ROM:C82C                 db  18h
+ROM:C82D                 db    0
+ROM:C82E                 db    0
+ROM:C82F                 db    0
+ROM:C830                 db    0
+ROM:C831                 db  35h ; 5
+ROM:C832                 db  19h
+ROM:C833                 db  84h ; Ä
+ROM:C834                 db  18h
+ROM:C835                 db  18h
+ROM:C836                 db    0
+ROM:C837                 db    0
+ROM:C838                 db    0
+ROM:C839                 db    0
+ROM:C83A                 db  35h ; 5
+ROM:C83B                 db  19h
+ROM:C83C                 db  85h ; Å
+ROM:C83D                 db  18h
+ROM:C83E                 db  18h
+ROM:C83F                 db  33h ; 3
+ROM:C840                 db  19h
+ROM:C841                 db    0
+ROM:C842                 db    0
+ROM:C843                 db  31h ; 1
+ROM:C844                 db    0
+ROM:C845                 db  84h ; Ä
+ROM:C846                 db  18h
+ROM:C847                 db    0
+ROM:C848                 db  33h ; 3
+ROM:C849                 db  19h
+ROM:C84A                 db  85h ; Å
+ROM:C84B                 db  18h
+ROM:C84C                 db  18h
+ROM:C84D                 db    0
+ROM:C84E                 db    0
+ROM:C84F                 db    0
+ROM:C850                 db    0
+ROM:C851                 db  35h ; 5
+ROM:C852                 db  19h
+ROM:C853                 db  18h
+ROM:C854                 db  18h
+ROM:C855                 db    0
+ROM:C856                 db    0
+ROM:C857                 db  84h ; Ä
+ROM:C858                 db  18h
+ROM:C859                 db  18h
+ROM:C85A                 db  31h ; 1
+ROM:C85B                 db  19h
+ROM:C85C                 db    0
+ROM:C85D                 db    0
+ROM:C85E                 db    0
+ROM:C85F                 db  19h
+ROM:C860                 db  85h ; Å
+ROM:C861                 db  18h
+ROM:C862                 db  18h
+ROM:C863                 db  31h ; 1
+ROM:C864                 db    0
+ROM:C865                 db  18h
+ROM:C866                 db  18h
+ROM:C867                 db  30h ; 0
+ROM:C868                 db  18h
+ROM:C869                 db  84h ; Ä
+ROM:C86A                 db  18h
+ROM:C86B                 db    0
+ROM:C86C                 db    0
+ROM:C86D                 db    0
+ROM:C86E                 db    0
+ROM:C86F                 db    0
+ROM:C870                 db  31h ; 1
+ROM:C871                 db  16h
+ROM:C872                 db  85h ; Å
+ROM:C873                 db  18h
+ROM:C874                 db  18h
+ROM:C875                 db  30h ; 0
+ROM:C876                 db    0
+ROM:C877                 db    0
+ROM:C878                 db    0
+ROM:C879                 db  2Eh ; .
+ROM:C87A                 db  16h
+ROM:C87B                 db  84h ; Ä
+ROM:C87C                 db  18h
+ROM:C87D                 db  18h
+ROM:C87E                 db  30h ; 0
+ROM:C87F                 db    0
+ROM:C880                 db    0
+ROM:C881                 db    0
+ROM:C882                 db  31h ; 1
+ROM:C883                 db  16h
+ROM:C884                 db  85h ; Å
+ROM:C885                 db  18h
+ROM:C886                 db  18h
+ROM:C887                 db  33h ; 3
+ROM:C888                 db  16h
+ROM:C889                 db    0
+ROM:C88A                 db    0
+ROM:C88B                 db    0
+ROM:C88C                 db    0
+ROM:C88D                 db  84h ; Ä
+ROM:C88E                 db  18h
+ROM:C88F                 db    0
+ROM:C890                 db  35h ; 5
+ROM:C891                 db  16h
+ROM:C892                 db  85h ; Å
+ROM:C893                 db  18h
+ROM:C894                 db  18h
+ROM:C895                 db    0
+ROM:C896                 db    0
+ROM:C897                 db    0
+ROM:C898                 db    0
+ROM:C899                 db  33h ; 3
+ROM:C89A                 db  16h
+ROM:C89B                 db  18h
+ROM:C89C                 db  18h
+ROM:C89D                 db    0
+ROM:C89E                 db    0
+ROM:C89F                 db  84h ; Ä
+ROM:C8A0                 db  18h
+ROM:C8A1                 db  18h
+ROM:C8A2                 db  31h ; 1
+ROM:C8A3                 db  16h
+ROM:C8A4                 db    0
+ROM:C8A5                 db    0
+ROM:C8A6                 db    0
+ROM:C8A7                 db  16h
+ROM:C8A8                 db  85h ; Å
+ROM:C8A9                 db  18h
+ROM:C8AA                 db  18h
+ROM:C8AB                 db  31h ; 1
+ROM:C8AC                 db    0
+ROM:C8AD                 db  18h
+ROM:C8AE                 db  18h
+ROM:C8AF                 db  33h ; 3
+ROM:C8B0                 db  14h
+ROM:C8B1                 db  84h ; Ä
+ROM:C8B2                 db  18h
+ROM:C8B3                 db    0
+ROM:C8B4                 db  31h ; 1
+ROM:C8B5                 db    0
+ROM:C8B6                 db    0
+ROM:C8B7                 db    0
+ROM:C8B8                 db  35h ; 5
+ROM:C8B9                 db  12h
+ROM:C8BA                 db  85h ; Å
+ROM:C8BB                 db  18h
+ROM:C8BC                 db  18h
+ROM:C8BD                 db    0
+ROM:C8BE                 db    0
+ROM:C8BF                 db    0
+ROM:C8C0                 db    0
+ROM:C8C1                 db    0
+ROM:C8C2                 db  12h
+ROM:C8C3                 db  84h ; Ä
+ROM:C8C4                 db  18h
+ROM:C8C5                 db  18h
+ROM:C8C6                 db  33h ; 3
+ROM:C8C7                 db    0
+ROM:C8C8                 db    0
+ROM:C8C9                 db    0
+ROM:C8CA                 db    0
+ROM:C8CB                 db  12h
+ROM:C8CC                 db  85h ; Å
+ROM:C8CD                 db  18h
+ROM:C8CE                 db  18h
+ROM:C8CF                 db    0
+ROM:C8D0                 db  12h
+ROM:C8D1                 db    0
+ROM:C8D2                 db    0
+ROM:C8D3                 db    0
+ROM:C8D4                 db    0
+ROM:C8D5                 db  84h ; Ä
+ROM:C8D6                 db  18h
+ROM:C8D7                 db    0
+ROM:C8D8                 db    0
+ROM:C8D9                 db  12h
+ROM:C8DA                 db  85h ; Å
+ROM:C8DB                 db  18h
+ROM:C8DC                 db  18h
+ROM:C8DD                 db  35h ; 5
+ROM:C8DE                 db    0
+ROM:C8DF                 db    0
+ROM:C8E0                 db    0
+ROM:C8E1                 db    0
+ROM:C8E2                 db  12h
+ROM:C8E3                 db  18h
+ROM:C8E4                 db  18h
+ROM:C8E5                 db  36h ; 6
+ROM:C8E6                 db    0
+ROM:C8E7                 db  84h ; Ä
+ROM:C8E8                 db  18h
+ROM:C8E9                 db  18h
+ROM:C8EA                 db  33h ; 3
+ROM:C8EB                 db  12h
+ROM:C8EC                 db    0
+ROM:C8ED                 db    0
+ROM:C8EE                 db    0
+ROM:C8EF                 db  12h
+ROM:C8F0                 db  85h ; Å
+ROM:C8F1                 db  18h
+ROM:C8F2                 db  18h
+ROM:C8F3                 db    0
+ROM:C8F4                 db  12h
+ROM:C8F5                 db  18h
+ROM:C8F6                 db  18h
+ROM:C8F7                 db    0
+ROM:C8F8                 db  11h
+ROM:C8F9                 db  84h ; Ä
+ROM:C8FA                 db  18h
+ROM:C8FB                 db    0
+ROM:C8FC                 db    0
+ROM:C8FD                 db  12h
+ROM:C8FE                 db    0
+ROM:C8FF                 db    0
+ROM:C900                 db  35h ; 5
+ROM:C901                 db  14h
+ROM:C902                 db  85h ; Å
+ROM:C903                 db  18h
+ROM:C904                 db  18h
+ROM:C905                 db    0
+ROM:C906                 db    0
+ROM:C907                 db    0
+ROM:C908                 db    0
+ROM:C909                 db    0
+ROM:C90A                 db  14h
+ROM:C90B                 db  84h ; Ä
+ROM:C90C                 db  18h
+ROM:C90D                 db  18h
+ROM:C90E                 db  33h ; 3
+ROM:C90F                 db    0
+ROM:C910                 db    0
+ROM:C911                 db    0
+ROM:C912                 db    0
+ROM:C913                 db  14h
+ROM:C914                 db  85h ; Å
+ROM:C915                 db  18h
+ROM:C916                 db  18h
+ROM:C917                 db    0
+ROM:C918                 db  14h
+ROM:C919                 db    0
+ROM:C91A                 db    0
+ROM:C91B                 db    0
+ROM:C91C                 db    0
+ROM:C91D                 db  84h ; Ä
+ROM:C91E                 db  18h
+ROM:C91F                 db    0
+ROM:C920                 db    0
+ROM:C921                 db  14h
+ROM:C922                 db  85h ; Å
+ROM:C923                 db  18h
+ROM:C924                 db  18h
+ROM:C925                 db  35h ; 5
+ROM:C926                 db    0
+ROM:C927                 db    0
+ROM:C928                 db    0
+ROM:C929                 db    0
+ROM:C92A                 db  14h
+ROM:C92B                 db  18h
+ROM:C92C                 db  18h
+ROM:C92D                 db  33h ; 3
+ROM:C92E                 db  14h
+ROM:C92F                 db  84h ; Ä
+ROM:C930                 db  18h
+ROM:C931                 db  18h
+ROM:C932                 db  31h ; 1
+ROM:C933                 db    0
+ROM:C934                 db    0
+ROM:C935                 db    0
+ROM:C936                 db    0
+ROM:C937                 db  16h
+ROM:C938                 db  85h ; Å
+ROM:C939                 db  18h
+ROM:C93A                 db  18h
+ROM:C93B                 db  30h ; 0
+ROM:C93C                 db    0
+ROM:C93D                 db  18h
+ROM:C93E                 db  18h
+ROM:C93F                 db    0
+ROM:C940                 db  18h
+ROM:C941                 db  84h ; Ä
+ROM:C942                 db  18h
+ROM:C943                 db    0
+ROM:C944                 db    0
+ROM:C945                 db    0
+ROM:C946                 db    0
+ROM:C947                 db    0
+ROM:C948                 db  86h ; Æ
+ROM:C949                 db  2Ch ; ,
+ROM:C94A                 db  82h ; Â
+ROM:C94B                 db  19h
+ROM:C94C                 db  85h ; Å
+ROM:C94D                 db  18h
+ROM:C94E                 db  87h ; Ç
+ROM:C94F                 db  18h
+ROM:C950                 db    0
+ROM:C951                 db    0
+ROM:C952                 db    0
+ROM:C953                 db    0
+ROM:C954                 db  2Ah ; *
+ROM:C955                 db  19h
+ROM:C956                 db  84h ; Ä
+ROM:C957                 db  18h
+ROM:C958                 db  18h
+ROM:C959                 db    0
+ROM:C95A                 db    0
+ROM:C95B                 db    0
+ROM:C95C                 db    0
+ROM:C95D                 db  29h ; )
+ROM:C95E                 db  19h
+ROM:C95F                 db  85h ; Å
+ROM:C960                 db  18h
+ROM:C961                 db  18h
+ROM:C962                 db    0
+ROM:C963                 db  19h
+ROM:C964                 db    0
+ROM:C965                 db    0
+ROM:C966                 db  2Ah ; *
+ROM:C967                 db    0
+ROM:C968                 db  84h ; Ä
+ROM:C969                 db  18h
+ROM:C96A                 db    0
+ROM:C96B                 db  2Ch ; ,
+ROM:C96C                 db  19h
+ROM:C96D                 db  85h ; Å
+ROM:C96E                 db  18h
+ROM:C96F                 db  18h
+ROM:C970                 db    0
+ROM:C971                 db    0
+ROM:C972                 db    0
+ROM:C973                 db    0
+ROM:C974                 db    0
+ROM:C975                 db  19h
+ROM:C976                 db  18h
+ROM:C977                 db  18h
+ROM:C978                 db    0
+ROM:C979                 db    0
+ROM:C97A                 db  84h ; Ä
+ROM:C97B                 db  18h
+ROM:C97C                 db  18h
+ROM:C97D                 db    0
+ROM:C97E                 db  19h
+ROM:C97F                 db    0
+ROM:C980                 db    0
+ROM:C981                 db    0
+ROM:C982                 db  19h
+ROM:C983                 db  85h ; Å
+ROM:C984                 db  18h
+ROM:C985                 db  18h
+ROM:C986                 db    0
+ROM:C987                 db    0
+ROM:C988                 db  18h
+ROM:C989                 db  18h
+ROM:C98A                 db    0
+ROM:C98B                 db  18h
+ROM:C98C                 db  84h ; Ä
+ROM:C98D                 db  18h
+ROM:C98E                 db  18h
+ROM:C98F                 db    0
+ROM:C990                 db    0
+ROM:C991                 db    0
+ROM:C992                 db    0
+ROM:C993                 db  2Eh ; .
+ROM:C994                 db  16h
+ROM:C995                 db  85h ; Å
+ROM:C996                 db  18h
+ROM:C997                 db  18h
+ROM:C998                 db  2Ch ; ,
+ROM:C999                 db    0
+ROM:C99A                 db    0
+ROM:C99B                 db    0
+ROM:C99C                 db  2Eh ; .
+ROM:C99D                 db  16h
+ROM:C99E                 db  84h ; Ä
+ROM:C99F                 db  18h
+ROM:C9A0                 db  18h
+ROM:C9A1                 db  2Ch ; ,
+ROM:C9A2                 db    0
+ROM:C9A3                 db    0
+ROM:C9A4                 db    0
+ROM:C9A5                 db  2Eh ; .
+ROM:C9A6                 db  16h
+ROM:C9A7                 db  85h ; Å
+ROM:C9A8                 db  18h
+ROM:C9A9                 db  18h
+ROM:C9AA                 db  2Ch ; ,
+ROM:C9AB                 db  16h
+ROM:C9AC                 db    0
+ROM:C9AD                 db    0
+ROM:C9AE                 db    0
+ROM:C9AF                 db    0
+ROM:C9B0                 db  84h ; Ä
+ROM:C9B1                 db  18h
+ROM:C9B2                 db    0
+ROM:C9B3                 db  2Eh ; .
+ROM:C9B4                 db  16h
+ROM:C9B5                 db  85h ; Å
+ROM:C9B6                 db  18h
+ROM:C9B7                 db  18h
+ROM:C9B8                 db    0
+ROM:C9B9                 db    0
+ROM:C9BA                 db    0
+ROM:C9BB                 db    0
+ROM:C9BC                 db  2Ch ; ,
+ROM:C9BD                 db  16h
+ROM:C9BE                 db  18h
+ROM:C9BF                 db  18h
+ROM:C9C0                 db    0
+ROM:C9C1                 db    0
+ROM:C9C2                 db  84h ; Ä
+ROM:C9C3                 db  18h
+ROM:C9C4                 db  18h
+ROM:C9C5                 db  29h ; )
+ROM:C9C6                 db  16h
+ROM:C9C7                 db    0
+ROM:C9C8                 db    0
+ROM:C9C9                 db    0
+ROM:C9CA                 db  16h
+ROM:C9CB                 db  85h ; Å
+ROM:C9CC                 db  18h
+ROM:C9CD                 db  18h
+ROM:C9CE                 db  27h ; '
+ROM:C9CF                 db    0
+ROM:C9D0                 db  18h
+ROM:C9D1                 db  18h
+ROM:C9D2                 db    0
+ROM:C9D3                 db  14h
+ROM:C9D4                 db  84h ; Ä
+ROM:C9D5                 db  18h
+ROM:C9D6                 db  18h
+ROM:C9D7                 db  25h ; %
+ROM:C9D8                 db    0
+ROM:C9D9                 db    0
+ROM:C9DA                 db    0
+ROM:C9DB                 db  29h ; )
+ROM:C9DC                 db  12h
+ROM:C9DD                 db  85h ; Å
+ROM:C9DE                 db  18h
+ROM:C9DF                 db  18h
+ROM:C9E0                 db    0
+ROM:C9E1                 db    0
+ROM:C9E2                 db    0
+ROM:C9E3                 db    0
+ROM:C9E4                 db  29h ; )
+ROM:C9E5                 db  12h
+ROM:C9E6                 db  84h ; Ä
+ROM:C9E7                 db  18h
+ROM:C9E8                 db  18h
+ROM:C9E9                 db    0
+ROM:C9EA                 db    0
+ROM:C9EB                 db    0
+ROM:C9EC                 db    0
+ROM:C9ED                 db  2Ah ; *
+ROM:C9EE                 db  12h
+ROM:C9EF                 db  85h ; Å
+ROM:C9F0                 db  18h
+ROM:C9F1                 db  18h
+ROM:C9F2                 db    0
+ROM:C9F3                 db  12h
+ROM:C9F4                 db    0
+ROM:C9F5                 db    0
+ROM:C9F6                 db  29h ; )
+ROM:C9F7                 db    0
+ROM:C9F8                 db  84h ; Ä
+ROM:C9F9                 db  18h
+ROM:C9FA                 db    0
+ROM:C9FB                 db  2Ch ; ,
+ROM:C9FC                 db  12h
+ROM:C9FD                 db  85h ; Å
+ROM:C9FE                 db  18h
+ROM:C9FF                 db  18h
+ROM:CA00                 db    0
+ROM:CA01                 db    0
+ROM:CA02                 db    0
+ROM:CA03                 db    0
+ROM:CA04                 db  31h ; 1
+ROM:CA05                 db  12h
+ROM:CA06                 db  18h
+ROM:CA07                 db  18h
+ROM:CA08                 db  30h ; 0
+ROM:CA09                 db    0
+ROM:CA0A                 db  84h ; Ä
+ROM:CA0B                 db  18h
+ROM:CA0C                 db  18h
+ROM:CA0D                 db  31h ; 1
+ROM:CA0E                 db  12h
+ROM:CA0F                 db    0
+ROM:CA10                 db    0
+ROM:CA11                 db  30h ; 0
+ROM:CA12                 db  12h
+ROM:CA13                 db  85h ; Å
+ROM:CA14                 db  18h
+ROM:CA15                 db  18h
+ROM:CA16                 db  2Ch ; ,
+ROM:CA17                 db  12h
+ROM:CA18                 db  18h
+ROM:CA19                 db  18h
+ROM:CA1A                 db  27h ; '
+ROM:CA1B                 db  11h
+ROM:CA1C                 db  84h ; Ä
+ROM:CA1D                 db  18h
+ROM:CA1E                 db  18h
+ROM:CA1F                 db    0
+ROM:CA20                 db  12h
+ROM:CA21                 db    0
+ROM:CA22                 db    0
+ROM:CA23                 db  30h ; 0
+ROM:CA24                 db  14h
+ROM:CA25                 db  85h ; Å
+ROM:CA26                 db  18h
+ROM:CA27                 db  18h
+ROM:CA28                 db    0
+ROM:CA29                 db    0
+ROM:CA2A                 db    0
+ROM:CA2B                 db    0
+ROM:CA2C                 db  30h ; 0
+ROM:CA2D                 db  14h
+ROM:CA2E                 db  84h ; Ä
+ROM:CA2F                 db  18h
+ROM:CA30                 db  18h
+ROM:CA31                 db    0
+ROM:CA32                 db    0
+ROM:CA33                 db    0
+ROM:CA34                 db    0
+ROM:CA35                 db  31h ; 1
+ROM:CA36                 db  14h
+ROM:CA37                 db  85h ; Å
+ROM:CA38                 db  18h
+ROM:CA39                 db  18h
+ROM:CA3A                 db    0
+ROM:CA3B                 db  14h
+ROM:CA3C                 db    0
+ROM:CA3D                 db    0
+ROM:CA3E                 db  30h ; 0
+ROM:CA3F                 db    0
+ROM:CA40                 db  84h ; Ä
+ROM:CA41                 db  18h
+ROM:CA42                 db    0
+ROM:CA43                 db  33h ; 3
+ROM:CA44                 db  14h
+ROM:CA45                 db  85h ; Å
+ROM:CA46                 db  18h
+ROM:CA47                 db  18h
+ROM:CA48                 db    0
+ROM:CA49                 db    0
+ROM:CA4A                 db    0
+ROM:CA4B                 db    0
+ROM:CA4C                 db  31h ; 1
+ROM:CA4D                 db  14h
+ROM:CA4E                 db  18h
+ROM:CA4F                 db  18h
+ROM:CA50                 db  30h ; 0
+ROM:CA51                 db  14h
+ROM:CA52                 db  84h ; Ä
+ROM:CA53                 db  18h
+ROM:CA54                 db  18h
+ROM:CA55                 db  31h ; 1
+ROM:CA56                 db    0
+ROM:CA57                 db    0
+ROM:CA58                 db    0
+ROM:CA59                 db  30h ; 0
+ROM:CA5A                 db  16h
+ROM:CA5B                 db  85h ; Å
+ROM:CA5C                 db  18h
+ROM:CA5D                 db  18h
+ROM:CA5E                 db  2Eh ; .
+ROM:CA5F                 db    0
+ROM:CA60                 db  18h
+ROM:CA61                 db  18h
+ROM:CA62                 db  2Ch ; ,
+ROM:CA63                 db  18h
+ROM:CA64                 db  84h ; Ä
+ROM:CA65                 db  18h
+ROM:CA66                 db  18h
+ROM:CA67                 db  2Ah ; *
+ROM:CA68                 db    0
+ROM:CA69                 db    0
+ROM:CA6A                 db    0
+ROM:CA6B                 db  81h ; Á
+ROM:CA6C                 db  38h ; 8
+ROM:CA6D                 db  82h ; Â
+ROM:CA6E                 db  0Dh
+ROM:CA6F                 db  85h ; Å
+ROM:CA70                 db  18h
+ROM:CA71                 db  87h ; Ç
+ROM:CA72                 db  18h
+ROM:CA73                 db  36h ; 6
+ROM:CA74                 db    0
+ROM:CA75                 db    0
+ROM:CA76                 db    0
+ROM:CA77                 db  35h ; 5
+ROM:CA78                 db  0Dh
+ROM:CA79                 db  84h ; Ä
+ROM:CA7A                 db  18h
+ROM:CA7B                 db  18h
+ROM:CA7C                 db  38h ; 8
+ROM:CA7D                 db    0
+ROM:CA7E                 db    0
+ROM:CA7F                 db    0
+ROM:CA80                 db  36h ; 6
+ROM:CA81                 db  0Dh
+ROM:CA82                 db  85h ; Å
+ROM:CA83                 db  18h
+ROM:CA84                 db  18h
+ROM:CA85                 db  35h ; 5
+ROM:CA86                 db  0Dh
+ROM:CA87                 db    0
+ROM:CA88                 db    0
+ROM:CA89                 db  38h ; 8
+ROM:CA8A                 db    0
+ROM:CA8B                 db  84h ; Ä
+ROM:CA8C                 db  18h
+ROM:CA8D                 db    0
+ROM:CA8E                 db  36h ; 6
+ROM:CA8F                 db  0Dh
+ROM:CA90                 db  85h ; Å
+ROM:CA91                 db  18h
+ROM:CA92                 db  18h
+ROM:CA93                 db  38h ; 8
+ROM:CA94                 db    0
+ROM:CA95                 db    0
+ROM:CA96                 db    0
+ROM:CA97                 db  36h ; 6
+ROM:CA98                 db  0Dh
+ROM:CA99                 db  18h
+ROM:CA9A                 db  18h
+ROM:CA9B                 db  35h ; 5
+ROM:CA9C                 db    0
+ROM:CA9D                 db  84h ; Ä
+ROM:CA9E                 db  18h
+ROM:CA9F                 db  18h
+ROM:CAA0                 db  38h ; 8
+ROM:CAA1                 db  0Dh
+ROM:CAA2                 db    0
+ROM:CAA3                 db    0
+ROM:CAA4                 db  36h ; 6
+ROM:CAA5                 db  0Dh
+ROM:CAA6                 db  85h ; Å
+ROM:CAA7                 db  18h
+ROM:CAA8                 db  18h
+ROM:CAA9                 db  35h ; 5
+ROM:CAAA                 db    0
+ROM:CAAB                 db  18h
+ROM:CAAC                 db  18h
+ROM:CAAD                 db  38h ; 8
+ROM:CAAE                 db  0Ch
+ROM:CAAF                 db  84h ; Ä
+ROM:CAB0                 db  18h
+ROM:CAB1                 db  18h
+ROM:CAB2                 db  36h ; 6
+ROM:CAB3                 db    0
+ROM:CAB4                 db    0
+ROM:CAB5                 db    0
+ROM:CAB6                 db  3Dh ; =
+ROM:CAB7                 db  0Ah
+ROM:CAB8                 db  85h ; Å
+ROM:CAB9                 db  18h
+ROM:CABA                 db  18h
+ROM:CABB                 db    0
+ROM:CABC                 db    0
+ROM:CABD                 db    0
+ROM:CABE                 db    0
+ROM:CABF                 db  3Dh ; =
+ROM:CAC0                 db  0Ah
+ROM:CAC1                 db  84h ; Ä
+ROM:CAC2                 db  18h
+ROM:CAC3                 db  18h
+ROM:CAC4                 db    0
+ROM:CAC5                 db    0
+ROM:CAC6                 db    0
+ROM:CAC7                 db    0
+ROM:CAC8                 db  3Dh ; =
+ROM:CAC9                 db  0Ah
+ROM:CACA                 db  85h ; Å
+ROM:CACB                 db  18h
+ROM:CACC                 db  18h
+ROM:CACD                 db  3Dh ; =
+ROM:CACE                 db  0Ah
+ROM:CACF                 db    0
+ROM:CAD0                 db    0
+ROM:CAD1                 db    0
+ROM:CAD2                 db    0
+ROM:CAD3                 db  84h ; Ä
+ROM:CAD4                 db  18h
+ROM:CAD5                 db    0
+ROM:CAD6                 db  3Ch ; <
+ROM:CAD7                 db  0Ah
+ROM:CAD8                 db  85h ; Å
+ROM:CAD9                 db  18h
+ROM:CADA                 db  18h
+ROM:CADB                 db    0
+ROM:CADC                 db    0
+ROM:CADD                 db    0
+ROM:CADE                 db    0
+ROM:CADF                 db  3Ah ; :
+ROM:CAE0                 db  0Ah
+ROM:CAE1                 db  18h
+ROM:CAE2                 db  18h
+ROM:CAE3                 db    0
+ROM:CAE4                 db    0
+ROM:CAE5                 db  84h ; Ä
+ROM:CAE6                 db  18h
+ROM:CAE7                 db  18h
+ROM:CAE8                 db  3Ah ; :
+ROM:CAE9                 db  0Ah
+ROM:CAEA                 db    0
+ROM:CAEB                 db    0
+ROM:CAEC                 db    0
+ROM:CAED                 db  0Ah
+ROM:CAEE                 db  85h ; Å
+ROM:CAEF                 db  18h
+ROM:CAF0                 db  18h
+ROM:CAF1                 db  3Ah ; :
+ROM:CAF2                 db    0
+ROM:CAF3                 db  84h ; Ä
+ROM:CAF4                 db  18h
+ROM:CAF5                 db  18h
+ROM:CAF6                 db  38h ; 8
+ROM:CAF7                 db  14h
+ROM:CAF8                 db  18h
+ROM:CAF9                 db  18h
+ROM:CAFA                 db    0
+ROM:CAFB                 db    0
+ROM:CAFC                 db  18h
+ROM:CAFD                 db    0
+ROM:CAFE                 db  36h ; 6
+ROM:CAFF                 db  12h
+ROM:CB00                 db  85h ; Å
+ROM:CB01                 db  18h
+ROM:CB02                 db  18h
+ROM:CB03                 db  35h ; 5
+ROM:CB04                 db    0
+ROM:CB05                 db    0
+ROM:CB06                 db    0
+ROM:CB07                 db  31h ; 1
+ROM:CB08                 db  12h
+ROM:CB09                 db  84h ; Ä
+ROM:CB0A                 db  18h
+ROM:CB0B                 db  18h
+ROM:CB0C                 db  36h ; 6
+ROM:CB0D                 db    0
+ROM:CB0E                 db    0
+ROM:CB0F                 db    0
+ROM:CB10                 db  35h ; 5
+ROM:CB11                 db  12h
+ROM:CB12                 db  85h ; Å
+ROM:CB13                 db  18h
+ROM:CB14                 db  18h
+ROM:CB15                 db  31h ; 1
+ROM:CB16                 db  12h
+ROM:CB17                 db    0
+ROM:CB18                 db    0
+ROM:CB19                 db  36h ; 6
+ROM:CB1A                 db    0
+ROM:CB1B                 db  84h ; Ä
+ROM:CB1C                 db  18h
+ROM:CB1D                 db    0
+ROM:CB1E                 db  35h ; 5
+ROM:CB1F                 db  12h
+ROM:CB20                 db  85h ; Å
+ROM:CB21                 db  18h
+ROM:CB22                 db  18h
+ROM:CB23                 db  36h ; 6
+ROM:CB24                 db    0
+ROM:CB25                 db    0
+ROM:CB26                 db    0
+ROM:CB27                 db  35h ; 5
+ROM:CB28                 db  12h
+ROM:CB29                 db  18h
+ROM:CB2A                 db  18h
+ROM:CB2B                 db  31h ; 1
+ROM:CB2C                 db    0
+ROM:CB2D                 db  84h ; Ä
+ROM:CB2E                 db  18h
+ROM:CB2F                 db  18h
+ROM:CB30                 db  36h ; 6
+ROM:CB31                 db  12h
+ROM:CB32                 db    0
+ROM:CB33                 db    0
+ROM:CB34                 db  35h ; 5
+ROM:CB35                 db  12h
+ROM:CB36                 db  85h ; Å
+ROM:CB37                 db  18h
+ROM:CB38                 db  18h
+ROM:CB39                 db  31h ; 1
+ROM:CB3A                 db  12h
+ROM:CB3B                 db  18h
+ROM:CB3C                 db  18h
+ROM:CB3D                 db  36h ; 6
+ROM:CB3E                 db  11h
+ROM:CB3F                 db  84h ; Ä
+ROM:CB40                 db  18h
+ROM:CB41                 db  18h
+ROM:CB42                 db  35h ; 5
+ROM:CB43                 db  12h
+ROM:CB44                 db    0
+ROM:CB45                 db    0
+ROM:CB46                 db  38h ; 8
+ROM:CB47                 db  14h
+ROM:CB48                 db  85h ; Å
+ROM:CB49                 db  18h
+ROM:CB4A                 db  18h
+ROM:CB4B                 db    0
+ROM:CB4C                 db    0
+ROM:CB4D                 db    0
+ROM:CB4E                 db    0
+ROM:CB4F                 db  38h ; 8
+ROM:CB50                 db  14h
+ROM:CB51                 db  84h ; Ä
+ROM:CB52                 db  18h
+ROM:CB53                 db  18h
+ROM:CB54                 db    0
+ROM:CB55                 db    0
+ROM:CB56                 db    0
+ROM:CB57                 db    0
+ROM:CB58                 db  38h ; 8
+ROM:CB59                 db  14h
+ROM:CB5A                 db  85h ; Å
+ROM:CB5B                 db  18h
+ROM:CB5C                 db  18h
+ROM:CB5D                 db  38h ; 8
+ROM:CB5E                 db  14h
+ROM:CB5F                 db    0
+ROM:CB60                 db    0
+ROM:CB61                 db    0
+ROM:CB62                 db    0
+ROM:CB63                 db  84h ; Ä
+ROM:CB64                 db  18h
+ROM:CB65                 db    0
+ROM:CB66                 db  3Ch ; <
+ROM:CB67                 db  14h
+ROM:CB68                 db  85h ; Å
+ROM:CB69                 db  18h
+ROM:CB6A                 db  18h
+ROM:CB6B                 db    0
+ROM:CB6C                 db    0
+ROM:CB6D                 db    0
+ROM:CB6E                 db    0
+ROM:CB6F                 db  3Ch ; <
+ROM:CB70                 db  14h
+ROM:CB71                 db  18h
+ROM:CB72                 db  18h
+ROM:CB73                 db  3Ch ; <
+ROM:CB74                 db    0
+ROM:CB75                 db  84h ; Ä
+ROM:CB76                 db  18h
+ROM:CB77                 db  18h
+ROM:CB78                 db    0
+ROM:CB79                 db  14h
+ROM:CB7A                 db    0
+ROM:CB7B                 db    0
+ROM:CB7C                 db  3Fh ; ?
+ROM:CB7D                 db  12h
+ROM:CB7E                 db  85h ; Å
+ROM:CB7F                 db  18h
+ROM:CB80                 db  18h
+ROM:CB81                 db  3Fh ; ?
+ROM:CB82                 db    0
+ROM:CB83                 db  84h ; Ä
+ROM:CB84                 db  18h
+ROM:CB85                 db  18h
+ROM:CB86                 db  3Fh ; ?
+ROM:CB87                 db  0Fh
+ROM:CB88                 db  18h
+ROM:CB89                 db  18h
+ROM:CB8A                 db    0
+ROM:CB8B                 db    0
+ROM:CB8C                 db  18h
+ROM:CB8D                 db    0
+ROM:CB8E                 db    0
+ROM:CB8F                 db  82h ; Â
+ROM:CB90                 db  0Dh
+ROM:CB91                 db  85h ; Å
+ROM:CB92                 db  18h
+ROM:CB93                 db  87h ; Ç
+ROM:CB94                 db  18h
+ROM:CB95                 db    0
+ROM:CB96                 db    0
+ROM:CB97                 db    0
+ROM:CB98                 db    0
+ROM:CB99                 db    0
+ROM:CB9A                 db  0Dh
+ROM:CB9B                 db  84h ; Ä
+ROM:CB9C                 db  18h
+ROM:CB9D                 db  18h
+ROM:CB9E                 db    0
+ROM:CB9F                 db    0
+ROM:CBA0                 db    0
+ROM:CBA1                 db    0
+ROM:CBA2                 db    0
+ROM:CBA3                 db  0Dh
+ROM:CBA4                 db  85h ; Å
+ROM:CBA5                 db  18h
+ROM:CBA6                 db  18h
+ROM:CBA7                 db    0
+ROM:CBA8                 db  0Dh
+ROM:CBA9                 db  18h
+ROM:CBAA                 db    0
+ROM:CBAB                 db    0
+ROM:CBAC                 db    0
+ROM:CBAD                 db  84h ; Ä
+ROM:CBAE                 db  18h
+ROM:CBAF                 db    0
+ROM:CBB0                 db    0
+ROM:CBB1                 db  0Dh
+ROM:CBB2                 db  85h ; Å
+ROM:CBB3                 db  18h
+ROM:CBB4                 db  18h
+ROM:CBB5                 db    0
+ROM:CBB6                 db    0
+ROM:CBB7                 db    0
+ROM:CBB8                 db    0
+ROM:CBB9                 db    0
+ROM:CBBA                 db  0Dh
+ROM:CBBB                 db  18h
+ROM:CBBC                 db  18h
+ROM:CBBD                 db    0
+ROM:CBBE                 db    0
+ROM:CBBF                 db  84h ; Ä
+ROM:CBC0                 db  18h
+ROM:CBC1                 db  18h
+ROM:CBC2                 db    0
+ROM:CBC3                 db  0Dh
+ROM:CBC4                 db    0
+ROM:CBC5                 db    0
+ROM:CBC6                 db    0
+ROM:CBC7                 db  0Dh
+ROM:CBC8                 db  85h ; Å
+ROM:CBC9                 db  18h
+ROM:CBCA                 db  18h
+ROM:CBCB                 db    0
+ROM:CBCC                 db    0
+ROM:CBCD                 db  18h
+ROM:CBCE                 db  18h
+ROM:CBCF                 db    0
+ROM:CBD0                 db  0Ch
+ROM:CBD1                 db  84h ; Ä
+ROM:CBD2                 db  18h
+ROM:CBD3                 db  18h
+ROM:CBD4                 db    0
+ROM:CBD5                 db    0
+ROM:CBD6                 db    0
+ROM:CBD7                 db    0
+ROM:CBD8                 db    0
+ROM:CBD9                 db  0Ah
+ROM:CBDA                 db  85h ; Å
+ROM:CBDB                 db  18h
+ROM:CBDC                 db  18h
+ROM:CBDD                 db    0
+ROM:CBDE                 db    0
+ROM:CBDF                 db    0
+ROM:CBE0                 db    0
+ROM:CBE1                 db    0
+ROM:CBE2                 db  0Ah
+ROM:CBE3                 db  84h ; Ä
+ROM:CBE4                 db  18h
+ROM:CBE5                 db  18h
+ROM:CBE6                 db    0
+ROM:CBE7                 db    0
+ROM:CBE8                 db    0
+ROM:CBE9                 db    0
+ROM:CBEA                 db    0
+ROM:CBEB                 db  0Ah
+ROM:CBEC                 db  85h ; Å
+ROM:CBED                 db  18h
+ROM:CBEE                 db  18h
+ROM:CBEF                 db    0
+ROM:CBF0                 db  0Ah
+ROM:CBF1                 db  18h
+ROM:CBF2                 db    0
+ROM:CBF3                 db    0
+ROM:CBF4                 db    0
+ROM:CBF5                 db  84h ; Ä
+ROM:CBF6                 db  18h
+ROM:CBF7                 db    0
+ROM:CBF8                 db    0
+ROM:CBF9                 db  0Ah
+ROM:CBFA                 db  85h ; Å
+ROM:CBFB                 db  18h
+ROM:CBFC                 db  18h
+ROM:CBFD                 db    0
+ROM:CBFE                 db    0
+ROM:CBFF                 db    0
+ROM:CC00                 db    0
+ROM:CC01                 db    0
+ROM:CC02                 db  0Ah
+ROM:CC03                 db  18h
+ROM:CC04                 db  18h
+ROM:CC05                 db    0
+ROM:CC06                 db    0
+ROM:CC07                 db  84h ; Ä
+ROM:CC08                 db  18h
+ROM:CC09                 db  18h
+ROM:CC0A                 db    0
+ROM:CC0B                 db  0Ah
+ROM:CC0C                 db    0
+ROM:CC0D                 db    0
+ROM:CC0E                 db    0
+ROM:CC0F                 db  0Ah
+ROM:CC10                 db  85h ; Å
+ROM:CC11                 db  18h
+ROM:CC12                 db  18h
+ROM:CC13                 db    0
+ROM:CC14                 db    0
+ROM:CC15                 db  84h ; Ä
+ROM:CC16                 db  18h
+ROM:CC17                 db  18h
+ROM:CC18                 db    0
+ROM:CC19                 db  14h
+ROM:CC1A                 db  18h
+ROM:CC1B                 db  18h
+ROM:CC1C                 db    0
+ROM:CC1D                 db    0
+ROM:CC1E                 db  18h
+ROM:CC1F                 db    0
+ROM:CC20                 db    0
+ROM:CC21                 db  12h
+ROM:CC22                 db  85h ; Å
+ROM:CC23                 db  18h
+ROM:CC24                 db  18h
+ROM:CC25                 db    0
+ROM:CC26                 db    0
+ROM:CC27                 db    0
+ROM:CC28                 db    0
+ROM:CC29                 db    0
+ROM:CC2A                 db  12h
+ROM:CC2B                 db  84h ; Ä
+ROM:CC2C                 db  18h
+ROM:CC2D                 db  18h
+ROM:CC2E                 db    0
+ROM:CC2F                 db    0
+ROM:CC30                 db    0
+ROM:CC31                 db    0
+ROM:CC32                 db    0
+ROM:CC33                 db  12h
+ROM:CC34                 db  85h ; Å
+ROM:CC35                 db  18h
+ROM:CC36                 db  18h
+ROM:CC37                 db    0
+ROM:CC38                 db  12h
+ROM:CC39                 db  18h
+ROM:CC3A                 db    0
+ROM:CC3B                 db    0
+ROM:CC3C                 db    0
+ROM:CC3D                 db  84h ; Ä
+ROM:CC3E                 db  18h
+ROM:CC3F                 db    0
+ROM:CC40                 db    0
+ROM:CC41                 db  12h
+ROM:CC42                 db  85h ; Å
+ROM:CC43                 db  18h
+ROM:CC44                 db  18h
+ROM:CC45                 db    0
+ROM:CC46                 db    0
+ROM:CC47                 db    0
+ROM:CC48                 db    0
+ROM:CC49                 db    0
+ROM:CC4A                 db  12h
+ROM:CC4B                 db  18h
+ROM:CC4C                 db  18h
+ROM:CC4D                 db    0
+ROM:CC4E                 db    0
+ROM:CC4F                 db  84h ; Ä
+ROM:CC50                 db  18h
+ROM:CC51                 db  18h
+ROM:CC52                 db    0
+ROM:CC53                 db  12h
+ROM:CC54                 db    0
+ROM:CC55                 db    0
+ROM:CC56                 db    0
+ROM:CC57                 db  12h
+ROM:CC58                 db  85h ; Å
+ROM:CC59                 db  18h
+ROM:CC5A                 db  18h
+ROM:CC5B                 db    0
+ROM:CC5C                 db  12h
+ROM:CC5D                 db  18h
+ROM:CC5E                 db  18h
+ROM:CC5F                 db    0
+ROM:CC60                 db  11h
+ROM:CC61                 db  84h ; Ä
+ROM:CC62                 db  18h
+ROM:CC63                 db  18h
+ROM:CC64                 db    0
+ROM:CC65                 db  12h
+ROM:CC66                 db    0
+ROM:CC67                 db    0
+ROM:CC68                 db    0
+ROM:CC69                 db  14h
+ROM:CC6A                 db  85h ; Å
+ROM:CC6B                 db  18h
+ROM:CC6C                 db  18h
+ROM:CC6D                 db    0
+ROM:CC6E                 db    0
+ROM:CC6F                 db    0
+ROM:CC70                 db    0
+ROM:CC71                 db    0
+ROM:CC72                 db  14h
+ROM:CC73                 db  84h ; Ä
+ROM:CC74                 db  18h
+ROM:CC75                 db  18h
+ROM:CC76                 db    0
+ROM:CC77                 db    0
+ROM:CC78                 db    0
+ROM:CC79                 db    0
+ROM:CC7A                 db    0
+ROM:CC7B                 db  14h
+ROM:CC7C                 db  85h ; Å
+ROM:CC7D                 db  18h
+ROM:CC7E                 db  18h
+ROM:CC7F                 db    0
+ROM:CC80                 db  14h
+ROM:CC81                 db  18h
+ROM:CC82                 db    0
+ROM:CC83                 db    0
+ROM:CC84                 db    0
+ROM:CC85                 db  84h ; Ä
+ROM:CC86                 db  18h
+ROM:CC87                 db    0
+ROM:CC88                 db    0
+ROM:CC89                 db  14h
+ROM:CC8A                 db  85h ; Å
+ROM:CC8B                 db  18h
+ROM:CC8C                 db  18h
+ROM:CC8D                 db    0
+ROM:CC8E                 db    0
+ROM:CC8F                 db  84h ; Ä
+ROM:CC90                 db  18h
+ROM:CC91                 db    0
+ROM:CC92                 db    0
+ROM:CC93                 db  14h
+ROM:CC94                 db  85h ; Å
+ROM:CC95                 db  18h
+ROM:CC96                 db  18h
+ROM:CC97                 db    0
+ROM:CC98                 db    0
+ROM:CC99                 db  18h
+ROM:CC9A                 db  18h
+ROM:CC9B                 db    0
+ROM:CC9C                 db  14h
+ROM:CC9D                 db  84h ; Ä
+ROM:CC9E                 db  18h
+ROM:CC9F                 db    0
+ROM:CCA0                 db    0
+ROM:CCA1                 db  12h
+ROM:CCA2                 db  85h ; Å
+ROM:CCA3                 db  18h
+ROM:CCA4                 db  18h
+ROM:CCA5                 db    0
+ROM:CCA6                 db    0
+ROM:CCA7                 db  18h
+ROM:CCA8                 db  18h
+ROM:CCA9                 db    0
+ROM:CCAA                 db  0Fh
+ROM:CCAB                 db  84h ; Ä
+ROM:CCAC                 db  18h
+ROM:CCAD                 db  18h
+ROM:CCAE                 db    0
+ROM:CCAF                 db    0
+ROM:CCB0                 db  85h ; Å
+ROM:CCB1                 db  18h
+ROM:CCB2                 db    0
+ROM:CCB3                 db  88h ; È
+ROM:CCB4                 db  41h ; A
+ROM:CCB5                 db  82h ; Â
+ROM:CCB6                 db  0Dh
+ROM:CCB7                 db  85h ; Å
+ROM:CCB8                 db  18h
+ROM:CCB9                 db  87h ; Ç
+ROM:CCBA                 db  18h
+ROM:CCBB                 db  41h ; A
+ROM:CCBC                 db    0
+ROM:CCBD                 db    0
+ROM:CCBE                 db    0
+ROM:CCBF                 db  3Dh ; =
+ROM:CCC0                 db  0Dh
+ROM:CCC1                 db  84h ; Ä
+ROM:CCC2                 db  18h
+ROM:CCC3                 db  18h
+ROM:CCC4                 db    0
+ROM:CCC5                 db    0
+ROM:CCC6                 db    0
+ROM:CCC7                 db    0
+ROM:CCC8                 db    0
+ROM:CCC9                 db  0Dh
+ROM:CCCA                 db  85h ; Å
+ROM:CCCB                 db  18h
+ROM:CCCC                 db  18h
+ROM:CCCD                 db    0
+ROM:CCCE                 db  0Dh
+ROM:CCCF                 db    0
+ROM:CCD0                 db    0
+ROM:CCD1                 db    0
+ROM:CCD2                 db    0
+ROM:CCD3                 db  84h ; Ä
+ROM:CCD4                 db  18h
+ROM:CCD5                 db    0
+ROM:CCD6                 db    0
+ROM:CCD7                 db  0Dh
+ROM:CCD8                 db  85h ; Å
+ROM:CCD9                 db  18h
+ROM:CCDA                 db  18h
+ROM:CCDB                 db  41h ; A
+ROM:CCDC                 db    0
+ROM:CCDD                 db    0
+ROM:CCDE                 db    0
+ROM:CCDF                 db  3Dh ; =
+ROM:CCE0                 db  0Dh
+ROM:CCE1                 db  18h
+ROM:CCE2                 db  18h
+ROM:CCE3                 db  3Fh ; ?
+ROM:CCE4                 db    0
+ROM:CCE5                 db  84h ; Ä
+ROM:CCE6                 db  18h
+ROM:CCE7                 db  18h
+ROM:CCE8                 db  3Dh ; =
+ROM:CCE9                 db  0Dh
+ROM:CCEA                 db    0
+ROM:CCEB                 db    0
+ROM:CCEC                 db    0
+ROM:CCED                 db  0Dh
+ROM:CCEE                 db  85h ; Å
+ROM:CCEF                 db  18h
+ROM:CCF0                 db  18h
+ROM:CCF1                 db  3Dh ; =
+ROM:CCF2                 db    0
+ROM:CCF3                 db  18h
+ROM:CCF4                 db  18h
+ROM:CCF5                 db  3Ch ; <
+ROM:CCF6                 db  0Ch
+ROM:CCF7                 db  84h ; Ä
+ROM:CCF8                 db  18h
+ROM:CCF9                 db  18h
+ROM:CCFA                 db    0
+ROM:CCFB                 db    0
+ROM:CCFC                 db    0
+ROM:CCFD                 db    0
+ROM:CCFE                 db  3Ah ; :
+ROM:CCFF                 db  0Ah
+ROM:CD00                 db  85h ; Å
+ROM:CD01                 db  18h
+ROM:CD02                 db  18h
+ROM:CD03                 db  3Ch ; <
+ROM:CD04                 db    0
+ROM:CD05                 db    0
+ROM:CD06                 db    0
+ROM:CD07                 db  3Dh ; =
+ROM:CD08                 db  0Ah
+ROM:CD09                 db  84h ; Ä
+ROM:CD0A                 db  18h
+ROM:CD0B                 db  18h
+ROM:CD0C                 db  3Ah ; :
+ROM:CD0D                 db    0
+ROM:CD0E                 db    0
+ROM:CD0F                 db    0
+ROM:CD10                 db    0
+ROM:CD11                 db  0Ah
+ROM:CD12                 db  85h ; Å
+ROM:CD13                 db  18h
+ROM:CD14                 db  18h
+ROM:CD15                 db    0
+ROM:CD16                 db  0Ah
+ROM:CD17                 db    0
+ROM:CD18                 db    0
+ROM:CD19                 db    0
+ROM:CD1A                 db    0
+ROM:CD1B                 db  84h ; Ä
+ROM:CD1C                 db  18h
+ROM:CD1D                 db    0
+ROM:CD1E                 db    0
+ROM:CD1F                 db  0Ah
+ROM:CD20                 db  85h ; Å
+ROM:CD21                 db  18h
+ROM:CD22                 db  18h
+ROM:CD23                 db  38h ; 8
+ROM:CD24                 db    0
+ROM:CD25                 db    0
+ROM:CD26                 db    0
+ROM:CD27                 db  3Ah ; :
+ROM:CD28                 db  0Ah
+ROM:CD29                 db  18h
+ROM:CD2A                 db  18h
+ROM:CD2B                 db  38h ; 8
+ROM:CD2C                 db    0
+ROM:CD2D                 db  84h ; Ä
+ROM:CD2E                 db  18h
+ROM:CD2F                 db  18h
+ROM:CD30                 db  35h ; 5
+ROM:CD31                 db  0Ah
+ROM:CD32                 db    0
+ROM:CD33                 db    0
+ROM:CD34                 db    0
+ROM:CD35                 db  0Ah
+ROM:CD36                 db  85h ; Å
+ROM:CD37                 db  18h
+ROM:CD38                 db  18h
+ROM:CD39                 db    0
+ROM:CD3A                 db    0
+ROM:CD3B                 db  84h ; Ä
+ROM:CD3C                 db  18h
+ROM:CD3D                 db  18h
+ROM:CD3E                 db    0
+ROM:CD3F                 db  14h
+ROM:CD40                 db  18h
+ROM:CD41                 db  18h
+ROM:CD42                 db    0
+ROM:CD43                 db    0
+ROM:CD44                 db  18h
+ROM:CD45                 db    0
+ROM:CD46                 db  42h ; B
+ROM:CD47                 db  12h
+ROM:CD48                 db  85h ; Å
+ROM:CD49                 db  18h
+ROM:CD4A                 db  18h
+ROM:CD4B                 db  42h ; B
+ROM:CD4C                 db    0
+ROM:CD4D                 db    0
+ROM:CD4E                 db    0
+ROM:CD4F                 db  42h ; B
+ROM:CD50                 db  12h
+ROM:CD51                 db  84h ; Ä
+ROM:CD52                 db  18h
+ROM:CD53                 db  18h
+ROM:CD54                 db    0
+ROM:CD55                 db    0
+ROM:CD56                 db    0
+ROM:CD57                 db    0
+ROM:CD58                 db  42h ; B
+ROM:CD59                 db  12h
+ROM:CD5A                 db  85h ; Å
+ROM:CD5B                 db  18h
+ROM:CD5C                 db  18h
+ROM:CD5D                 db    0
+ROM:CD5E                 db  12h
+ROM:CD5F                 db    0
+ROM:CD60                 db    0
+ROM:CD61                 db  41h ; A
+ROM:CD62                 db    0
+ROM:CD63                 db  84h ; Ä
+ROM:CD64                 db  18h
+ROM:CD65                 db    0
+ROM:CD66                 db  3Fh ; ?
+ROM:CD67                 db  12h
+ROM:CD68                 db  85h ; Å
+ROM:CD69                 db  18h
+ROM:CD6A                 db  18h
+ROM:CD6B                 db    0
+ROM:CD6C                 db    0
+ROM:CD6D                 db    0
+ROM:CD6E                 db    0
+ROM:CD6F                 db  3Dh ; =
+ROM:CD70                 db  12h
+ROM:CD71                 db  18h
+ROM:CD72                 db  18h
+ROM:CD73                 db    0
+ROM:CD74                 db    0
+ROM:CD75                 db  84h ; Ä
+ROM:CD76                 db  18h
+ROM:CD77                 db  18h
+ROM:CD78                 db  3Ah ; :
+ROM:CD79                 db  12h
+ROM:CD7A                 db    0
+ROM:CD7B                 db    0
+ROM:CD7C                 db    0
+ROM:CD7D                 db  12h
+ROM:CD7E                 db  85h ; Å
+ROM:CD7F                 db  18h
+ROM:CD80                 db  18h
+ROM:CD81                 db    0
+ROM:CD82                 db  12h
+ROM:CD83                 db  18h
+ROM:CD84                 db  18h
+ROM:CD85                 db    0
+ROM:CD86                 db  11h
+ROM:CD87                 db  84h ; Ä
+ROM:CD88                 db  18h
+ROM:CD89                 db  18h
+ROM:CD8A                 db    0
+ROM:CD8B                 db  12h
+ROM:CD8C                 db    0
+ROM:CD8D                 db    0
+ROM:CD8E                 db  41h ; A
+ROM:CD8F                 db  14h
+ROM:CD90                 db  85h ; Å
+ROM:CD91                 db  18h
+ROM:CD92                 db  18h
+ROM:CD93                 db  3Fh ; ?
+ROM:CD94                 db    0
+ROM:CD95                 db    0
+ROM:CD96                 db    0
+ROM:CD97                 db  41h ; A
+ROM:CD98                 db  14h
+ROM:CD99                 db  84h ; Ä
+ROM:CD9A                 db  18h
+ROM:CD9B                 db  18h
+ROM:CD9C                 db  3Fh ; ?
+ROM:CD9D                 db    0
+ROM:CD9E                 db    0
+ROM:CD9F                 db    0
+ROM:CDA0                 db  41h ; A
+ROM:CDA1                 db  14h
+ROM:CDA2                 db  85h ; Å
+ROM:CDA3                 db  18h
+ROM:CDA4                 db  18h
+ROM:CDA5                 db  3Fh ; ?
+ROM:CDA6                 db  14h
+ROM:CDA7                 db    0
+ROM:CDA8                 db    0
+ROM:CDA9                 db    0
+ROM:CDAA                 db    0
+ROM:CDAB                 db  84h ; Ä
+ROM:CDAC                 db  18h
+ROM:CDAD                 db    0
+ROM:CDAE                 db  42h ; B
+ROM:CDAF                 db  14h
+ROM:CDB0                 db  85h ; Å
+ROM:CDB1                 db  18h
+ROM:CDB2                 db  18h
+ROM:CDB3                 db    0
+ROM:CDB4                 db    0
+ROM:CDB5                 db    0
+ROM:CDB6                 db    0
+ROM:CDB7                 db  41h ; A
+ROM:CDB8                 db  14h
+ROM:CDB9                 db  18h
+ROM:CDBA                 db  18h
+ROM:CDBB                 db    0
+ROM:CDBC                 db    0
+ROM:CDBD                 db  84h ; Ä
+ROM:CDBE                 db  18h
+ROM:CDBF                 db  18h
+ROM:CDC0                 db  3Fh ; ?
+ROM:CDC1                 db  14h
+ROM:CDC2                 db    0
+ROM:CDC3                 db    0
+ROM:CDC4                 db    0
+ROM:CDC5                 db  12h
+ROM:CDC6                 db  85h ; Å
+ROM:CDC7                 db  18h
+ROM:CDC8                 db  18h
+ROM:CDC9                 db  3Dh ; =
+ROM:CDCA                 db    0
+ROM:CDCB                 db  84h ; Ä
+ROM:CDCC                 db  18h
+ROM:CDCD                 db  18h
+ROM:CDCE                 db    0
+ROM:CDCF                 db  0Fh
+ROM:CDD0                 db  18h
+ROM:CDD1                 db  18h
+ROM:CDD2                 db  38h ; 8
+ROM:CDD3                 db    0
+ROM:CDD4                 db  18h
+ROM:CDD5                 db    0
+ROM:CDD6                 db  88h ; È
+ROM:CDD7                 db  42h ; B
+ROM:CDD8                 db  82h ; Â
+ROM:CDD9                 db  0Dh
+ROM:CDDA                 db  85h ; Å
+ROM:CDDB                 db  18h
+ROM:CDDC                 db  87h ; Ç
+ROM:CDDD                 db  18h
+ROM:CDDE                 db  42h ; B
+ROM:CDDF                 db    0
+ROM:CDE0                 db    0
+ROM:CDE1                 db    0
+ROM:CDE2                 db  42h ; B
+ROM:CDE3                 db  0Dh
+ROM:CDE4                 db  84h ; Ä
+ROM:CDE5                 db  18h
+ROM:CDE6                 db  18h
+ROM:CDE7                 db  41h ; A
+ROM:CDE8                 db    0
+ROM:CDE9                 db    0
+ROM:CDEA                 db    0
+ROM:CDEB                 db  41h ; A
+ROM:CDEC                 db  0Dh
+ROM:CDED                 db  85h ; Å
+ROM:CDEE                 db  18h
+ROM:CDEF                 db  18h
+ROM:CDF0                 db  41h ; A
+ROM:CDF1                 db  0Dh
+ROM:CDF2                 db    0
+ROM:CDF3                 db    0
+ROM:CDF4                 db  41h ; A
+ROM:CDF5                 db    0
+ROM:CDF6                 db  84h ; Ä
+ROM:CDF7                 db  18h
+ROM:CDF8                 db    0
+ROM:CDF9                 db  41h ; A
+ROM:CDFA                 db  0Dh
+ROM:CDFB                 db  85h ; Å
+ROM:CDFC                 db  18h
+ROM:CDFD                 db  18h
+ROM:CDFE                 db  3Fh ; ?
+ROM:CDFF                 db    0
+ROM:CE00                 db    0
+ROM:CE01                 db    0
+ROM:CE02                 db  3Fh ; ?
+ROM:CE03                 db  0Dh
+ROM:CE04                 db  18h
+ROM:CE05                 db  18h
+ROM:CE06                 db  3Fh ; ?
+ROM:CE07                 db    0
+ROM:CE08                 db  84h ; Ä
+ROM:CE09                 db  18h
+ROM:CE0A                 db  18h
+ROM:CE0B                 db  41h ; A
+ROM:CE0C                 db  0Dh
+ROM:CE0D                 db    0
+ROM:CE0E                 db    0
+ROM:CE0F                 db  41h ; A
+ROM:CE10                 db  0Dh
+ROM:CE11                 db  85h ; Å
+ROM:CE12                 db  18h
+ROM:CE13                 db  18h
+ROM:CE14                 db  41h ; A
+ROM:CE15                 db    0
+ROM:CE16                 db  18h
+ROM:CE17                 db  18h
+ROM:CE18                 db  41h ; A
+ROM:CE19                 db  0Ch
+ROM:CE1A                 db  84h ; Ä
+ROM:CE1B                 db  18h
+ROM:CE1C                 db  18h
+ROM:CE1D                 db  41h ; A
+ROM:CE1E                 db    0
+ROM:CE1F                 db    0
+ROM:CE20                 db    0
+ROM:CE21                 db  42h ; B
+ROM:CE22                 db  0Ah
+ROM:CE23                 db  85h ; Å
+ROM:CE24                 db  18h
+ROM:CE25                 db  18h
+ROM:CE26                 db  42h ; B
+ROM:CE27                 db    0
+ROM:CE28                 db    0
+ROM:CE29                 db    0
+ROM:CE2A                 db  42h ; B
+ROM:CE2B                 db  0Ah
+ROM:CE2C                 db  84h ; Ä
+ROM:CE2D                 db  18h
+ROM:CE2E                 db  18h
+ROM:CE2F                 db  41h ; A
+ROM:CE30                 db    0
+ROM:CE31                 db    0
+ROM:CE32                 db    0
+ROM:CE33                 db  41h ; A
+ROM:CE34                 db  0Ah
+ROM:CE35                 db  85h ; Å
+ROM:CE36                 db  18h
+ROM:CE37                 db  18h
+ROM:CE38                 db  41h ; A
+ROM:CE39                 db  0Ah
+ROM:CE3A                 db    0
+ROM:CE3B                 db    0
+ROM:CE3C                 db  41h ; A
+ROM:CE3D                 db    0
+ROM:CE3E                 db  84h ; Ä
+ROM:CE3F                 db  18h
+ROM:CE40                 db    0
+ROM:CE41                 db  41h ; A
+ROM:CE42                 db  0Ah
+ROM:CE43                 db  85h ; Å
+ROM:CE44                 db  18h
+ROM:CE45                 db  18h
+ROM:CE46                 db  3Dh ; =
+ROM:CE47                 db    0
+ROM:CE48                 db    0
+ROM:CE49                 db    0
+ROM:CE4A                 db  3Dh ; =
+ROM:CE4B                 db  0Ah
+ROM:CE4C                 db  18h
+ROM:CE4D                 db  18h
+ROM:CE4E                 db  3Dh ; =
+ROM:CE4F                 db    0
+ROM:CE50                 db  84h ; Ä
+ROM:CE51                 db  18h
+ROM:CE52                 db  18h
+ROM:CE53                 db  3Fh ; ?
+ROM:CE54                 db  0Ah
+ROM:CE55                 db    0
+ROM:CE56                 db    0
+ROM:CE57                 db  3Fh ; ?
+ROM:CE58                 db  0Ah
+ROM:CE59                 db  85h ; Å
+ROM:CE5A                 db  18h
+ROM:CE5B                 db  18h
+ROM:CE5C                 db  3Fh ; ?
+ROM:CE5D                 db    0
+ROM:CE5E                 db  84h ; Ä
+ROM:CE5F                 db  18h
+ROM:CE60                 db  18h
+ROM:CE61                 db  3Fh ; ?
+ROM:CE62                 db  14h
+ROM:CE63                 db  18h
+ROM:CE64                 db  18h
+ROM:CE65                 db  3Fh ; ?
+ROM:CE66                 db    0
+ROM:CE67                 db  18h
+ROM:CE68                 db    0
+ROM:CE69                 db  42h ; B
+ROM:CE6A                 db  12h
+ROM:CE6B                 db  85h ; Å
+ROM:CE6C                 db  18h
+ROM:CE6D                 db  18h
+ROM:CE6E                 db  42h ; B
+ROM:CE6F                 db    0
+ROM:CE70                 db    0
+ROM:CE71                 db    0
+ROM:CE72                 db  42h ; B
+ROM:CE73                 db  12h
+ROM:CE74                 db  84h ; Ä
+ROM:CE75                 db  18h
+ROM:CE76                 db  18h
+ROM:CE77                 db  41h ; A
+ROM:CE78                 db    0
+ROM:CE79                 db    0
+ROM:CE7A                 db    0
+ROM:CE7B                 db    0
+ROM:CE7C                 db  12h
+ROM:CE7D                 db  85h ; Å
+ROM:CE7E                 db  18h
+ROM:CE7F                 db  18h
+ROM:CE80                 db    0
+ROM:CE81                 db  12h
+ROM:CE82                 db    0
+ROM:CE83                 db    0
+ROM:CE84                 db    0
+ROM:CE85                 db    0
+ROM:CE86                 db  84h ; Ä
+ROM:CE87                 db  18h
+ROM:CE88                 db    0
+ROM:CE89                 db    0
+ROM:CE8A                 db  12h
+ROM:CE8B                 db  85h ; Å
+ROM:CE8C                 db  18h
+ROM:CE8D                 db  18h
+ROM:CE8E                 db  3Fh ; ?
+ROM:CE8F                 db    0
+ROM:CE90                 db    0
+ROM:CE91                 db    0
+ROM:CE92                 db  3Fh ; ?
+ROM:CE93                 db  12h
+ROM:CE94                 db  18h
+ROM:CE95                 db  18h
+ROM:CE96                 db  3Fh ; ?
+ROM:CE97                 db    0
+ROM:CE98                 db  84h ; Ä
+ROM:CE99                 db  18h
+ROM:CE9A                 db  18h
+ROM:CE9B                 db  41h ; A
+ROM:CE9C                 db  12h
+ROM:CE9D                 db    0
+ROM:CE9E                 db    0
+ROM:CE9F                 db    0
+ROM:CEA0                 db  12h
+ROM:CEA1                 db  85h ; Å
+ROM:CEA2                 db  18h
+ROM:CEA3                 db  18h
+ROM:CEA4                 db    0
+ROM:CEA5                 db  12h
+ROM:CEA6                 db  18h
+ROM:CEA7                 db  18h
+ROM:CEA8                 db    0
+ROM:CEA9                 db  11h
+ROM:CEAA                 db  84h ; Ä
+ROM:CEAB                 db  18h
+ROM:CEAC                 db  18h
+ROM:CEAD                 db    0
+ROM:CEAE                 db  12h
+ROM:CEAF                 db    0
+ROM:CEB0                 db    0
+ROM:CEB1                 db  42h ; B
+ROM:CEB2                 db  14h
+ROM:CEB3                 db  85h ; Å
+ROM:CEB4                 db  18h
+ROM:CEB5                 db  18h
+ROM:CEB6                 db  42h ; B
+ROM:CEB7                 db    0
+ROM:CEB8                 db    0
+ROM:CEB9                 db    0
+ROM:CEBA                 db  42h ; B
+ROM:CEBB                 db  14h
+ROM:CEBC                 db  84h ; Ä
+ROM:CEBD                 db  18h
+ROM:CEBE                 db  18h
+ROM:CEBF                 db  41h ; A
+ROM:CEC0                 db    0
+ROM:CEC1                 db    0
+ROM:CEC2                 db    0
+ROM:CEC3                 db    0
+ROM:CEC4                 db  14h
+ROM:CEC5                 db  85h ; Å
+ROM:CEC6                 db  18h
+ROM:CEC7                 db  18h
+ROM:CEC8                 db  41h ; A
+ROM:CEC9                 db  14h
+ROM:CECA                 db    0
+ROM:CECB                 db    0
+ROM:CECC                 db  3Fh ; ?
+ROM:CECD                 db    0
+ROM:CECE                 db  84h ; Ä
+ROM:CECF                 db  18h
+ROM:CED0                 db    0
+ROM:CED1                 db    0
+ROM:CED2                 db  14h
+ROM:CED3                 db  85h ; Å
+ROM:CED4                 db  18h
+ROM:CED5                 db  18h
+ROM:CED6                 db  3Dh ; =
+ROM:CED7                 db    0
+ROM:CED8                 db  84h ; Ä
+ROM:CED9                 db  18h
+ROM:CEDA                 db    0
+ROM:CEDB                 db  3Dh ; =
+ROM:CEDC                 db  14h
+ROM:CEDD                 db  85h ; Å
+ROM:CEDE                 db  18h
+ROM:CEDF                 db  18h
+ROM:CEE0                 db  3Dh ; =
+ROM:CEE1                 db    0
+ROM:CEE2                 db  18h
+ROM:CEE3                 db  18h
+ROM:CEE4                 db  3Ch ; <
+ROM:CEE5                 db  14h
+ROM:CEE6                 db  84h ; Ä
+ROM:CEE7                 db  18h
+ROM:CEE8                 db    0
+ROM:CEE9                 db    0
+ROM:CEEA                 db  16h
+ROM:CEEB                 db  85h ; Å
+ROM:CEEC                 db  18h
+ROM:CEED                 db  18h
+ROM:CEEE                 db  3Ch ; <
+ROM:CEEF                 db    0
+ROM:CEF0                 db  18h
+ROM:CEF1                 db  18h
+ROM:CEF2                 db  3Ah ; :
+ROM:CEF3                 db  18h
+ROM:CEF4                 db  84h ; Ä
+ROM:CEF5                 db  18h
+ROM:CEF6                 db  18h
+ROM:CEF7                 db    0
+ROM:CEF8                 db    0
+ROM:CEF9                 db  85h ; Å
+ROM:CEFA                 db  18h
+ROM:CEFB                 db    0
+ROM:CEFC                 db  86h ; Æ
+ROM:CEFD                 db  9Fh ; ß
+ROM:CEFE                 db  2Ch ; ,
+ROM:CEFF                 db  82h ; Â
+ROM:CF00                 db  9Fh ; ß
+ROM:CF01                 db  19h
+ROM:CF02                 db  85h ; Å
+ROM:CF03                 db  9Fh ; ß
+ROM:CF04                 db  18h
+ROM:CF05                 db  87h ; Ç
+ROM:CF06                 db  9Fh ; ß
+ROM:CF07                 db  18h
+ROM:CF08                 db  9Fh ; ß
+ROM:CF09                 db    0
+ROM:CF0A                 db  9Fh ; ß
+ROM:CF0B                 db    0
+ROM:CF0C                 db  9Fh ; ß
+ROM:CF0D                 db    0
+ROM:CF0E                 db  9Fh ; ß
+ROM:CF0F                 db    0
+ROM:CF10                 db  9Fh ; ß
+ROM:CF11                 db  2Ah ; *
+ROM:CF12                 db  9Fh ; ß
+ROM:CF13                 db  19h
+ROM:CF14                 db  84h ; Ä
+ROM:CF15                 db  9Fh ; ß
+ROM:CF16                 db  18h
+ROM:CF17                 db  9Fh ; ß
+ROM:CF18                 db  18h
+ROM:CF19                 db  9Fh ; ß
+ROM:CF1A                 db    0
+ROM:CF1B                 db  9Fh ; ß
+ROM:CF1C                 db    0
+ROM:CF1D                 db  9Fh ; ß
+ROM:CF1E                 db    0
+ROM:CF1F                 db  9Fh ; ß
+ROM:CF20                 db    0
+ROM:CF21                 db  9Fh ; ß
+ROM:CF22                 db  29h ; )
+ROM:CF23                 db  9Fh ; ß
+ROM:CF24                 db  19h
+ROM:CF25                 db  85h ; Å
+ROM:CF26                 db  9Fh ; ß
+ROM:CF27                 db  18h
+ROM:CF28                 db  9Fh ; ß
+ROM:CF29                 db  18h
+ROM:CF2A                 db  9Fh ; ß
+ROM:CF2B                 db    0
+ROM:CF2C                 db  9Fh ; ß
+ROM:CF2D                 db  19h
+ROM:CF2E                 db  9Fh ; ß
+ROM:CF2F                 db    0
+ROM:CF30                 db  9Fh ; ß
+ROM:CF31                 db    0
+ROM:CF32                 db  9Fh ; ß
+ROM:CF33                 db  2Ah ; *
+ROM:CF34                 db  9Fh ; ß
+ROM:CF35                 db    0
+ROM:CF36                 db  84h ; Ä
+ROM:CF37                 db  9Fh ; ß
+ROM:CF38                 db  18h
+ROM:CF39                 db  9Fh ; ß
+ROM:CF3A                 db    0
+ROM:CF3B                 db  9Fh ; ß
+ROM:CF3C                 db  2Ch ; ,
+ROM:CF3D                 db  9Fh ; ß
+ROM:CF3E                 db  19h
+ROM:CF3F                 db  85h ; Å
+ROM:CF40                 db  9Fh ; ß
+ROM:CF41                 db  18h
+ROM:CF42                 db  9Fh ; ß
+ROM:CF43                 db  18h
+ROM:CF44                 db  9Dh ; Ý
+ROM:CF45                 db    0
+ROM:CF46                 db  9Dh ; Ý
+ROM:CF47                 db    0
+ROM:CF48                 db  9Dh ; Ý
+ROM:CF49                 db    0
+ROM:CF4A                 db  9Dh ; Ý
+ROM:CF4B                 db    0
+ROM:CF4C                 db  9Dh ; Ý
+ROM:CF4D                 db    0
+ROM:CF4E                 db  9Dh ; Ý
+ROM:CF4F                 db  19h
+ROM:CF50                 db  9Dh ; Ý
+ROM:CF51                 db  18h
+ROM:CF52                 db  9Dh ; Ý
+ROM:CF53                 db  18h
+ROM:CF54                 db  9Dh ; Ý
+ROM:CF55                 db    0
+ROM:CF56                 db  9Dh ; Ý
+ROM:CF57                 db    0
+ROM:CF58                 db  84h ; Ä
+ROM:CF59                 db  9Dh ; Ý
+ROM:CF5A                 db  18h
+ROM:CF5B                 db  9Dh ; Ý
+ROM:CF5C                 db  18h
+ROM:CF5D                 db  9Dh ; Ý
+ROM:CF5E                 db    0
+ROM:CF5F                 db  9Dh ; Ý
+ROM:CF60                 db  19h
+ROM:CF61                 db  9Dh ; Ý
+ROM:CF62                 db    0
+ROM:CF63                 db  9Dh ; Ý
+ROM:CF64                 db    0
+ROM:CF65                 db  9Dh ; Ý
+ROM:CF66                 db    0
+ROM:CF67                 db  9Dh ; Ý
+ROM:CF68                 db  19h
+ROM:CF69                 db  85h ; Å
+ROM:CF6A                 db  9Dh ; Ý
+ROM:CF6B                 db  18h
+ROM:CF6C                 db  9Dh ; Ý
+ROM:CF6D                 db  18h
+ROM:CF6E                 db  9Dh ; Ý
+ROM:CF6F                 db    0
+ROM:CF70                 db  9Dh ; Ý
+ROM:CF71                 db    0
+ROM:CF72                 db  9Dh ; Ý
+ROM:CF73                 db  18h
+ROM:CF74                 db  9Dh ; Ý
+ROM:CF75                 db  18h
+ROM:CF76                 db  9Dh ; Ý
+ROM:CF77                 db    0
+ROM:CF78                 db  9Dh ; Ý
+ROM:CF79                 db  18h
+ROM:CF7A                 db  84h ; Ä
+ROM:CF7B                 db  9Dh ; Ý
+ROM:CF7C                 db  18h
+ROM:CF7D                 db  9Dh ; Ý
+ROM:CF7E                 db  18h
+ROM:CF7F                 db  9Dh ; Ý
+ROM:CF80                 db    0
+ROM:CF81                 db  9Dh ; Ý
+ROM:CF82                 db    0
+ROM:CF83                 db  9Dh ; Ý
+ROM:CF84                 db    0
+ROM:CF85                 db  9Dh ; Ý
+ROM:CF86                 db    0
+ROM:CF87                 db  9Bh ; Û
+ROM:CF88                 db  2Eh ; .
+ROM:CF89                 db  9Bh ; Û
+ROM:CF8A                 db  16h
+ROM:CF8B                 db  85h ; Å
+ROM:CF8C                 db  9Bh ; Û
+ROM:CF8D                 db  18h
+ROM:CF8E                 db  9Bh ; Û
+ROM:CF8F                 db  18h
+ROM:CF90                 db  9Bh ; Û
+ROM:CF91                 db  2Ch ; ,
+ROM:CF92                 db  9Bh ; Û
+ROM:CF93                 db    0
+ROM:CF94                 db  9Bh ; Û
+ROM:CF95                 db    0
+ROM:CF96                 db  9Bh ; Û
+ROM:CF97                 db    0
+ROM:CF98                 db  9Bh ; Û
+ROM:CF99                 db  2Eh ; .
+ROM:CF9A                 db  9Bh ; Û
+ROM:CF9B                 db  16h
+ROM:CF9C                 db  84h ; Ä
+ROM:CF9D                 db  9Bh ; Û
+ROM:CF9E                 db  18h
+ROM:CF9F                 db  9Bh ; Û
+ROM:CFA0                 db  18h
+ROM:CFA1                 db  9Bh ; Û
+ROM:CFA2                 db  2Ch ; ,
+ROM:CFA3                 db  9Bh ; Û
+ROM:CFA4                 db    0
+ROM:CFA5                 db  9Bh ; Û
+ROM:CFA6                 db    0
+ROM:CFA7                 db  9Bh ; Û
+ROM:CFA8                 db    0
+ROM:CFA9                 db  9Bh ; Û
+ROM:CFAA                 db  2Eh ; .
+ROM:CFAB                 db  9Bh ; Û
+ROM:CFAC                 db  16h
+ROM:CFAD                 db  85h ; Å
+ROM:CFAE                 db  9Bh ; Û
+ROM:CFAF                 db  18h
+ROM:CFB0                 db  9Bh ; Û
+ROM:CFB1                 db  18h
+ROM:CFB2                 db  9Bh ; Û
+ROM:CFB3                 db  2Ch ; ,
+ROM:CFB4                 db  9Bh ; Û
+ROM:CFB5                 db  16h
+ROM:CFB6                 db  9Bh ; Û
+ROM:CFB7                 db    0
+ROM:CFB8                 db  9Bh ; Û
+ROM:CFB9                 db    0
+ROM:CFBA                 db  9Bh ; Û
+ROM:CFBB                 db    0
+ROM:CFBC                 db  9Bh ; Û
+ROM:CFBD                 db    0
+ROM:CFBE                 db  84h ; Ä
+ROM:CFBF                 db  9Bh ; Û
+ROM:CFC0                 db  18h
+ROM:CFC1                 db  9Bh ; Û
+ROM:CFC2                 db    0
+ROM:CFC3                 db  9Bh ; Û
+ROM:CFC4                 db  2Eh ; .
+ROM:CFC5                 db  9Bh ; Û
+ROM:CFC6                 db  16h
+ROM:CFC7                 db  85h ; Å
+ROM:CFC8                 db  9Bh ; Û
+ROM:CFC9                 db  18h
+ROM:CFCA                 db  9Bh ; Û
+ROM:CFCB                 db  18h
+ROM:CFCC                 db  99h ; Ù
+ROM:CFCD                 db    0
+ROM:CFCE                 db  99h ; Ù
+ROM:CFCF                 db    0
+ROM:CFD0                 db  99h ; Ù
+ROM:CFD1                 db    0
+ROM:CFD2                 db  99h ; Ù
+ROM:CFD3                 db    0
+ROM:CFD4                 db  99h ; Ù
+ROM:CFD5                 db  2Ch ; ,
+ROM:CFD6                 db  99h ; Ù
+ROM:CFD7                 db  16h
+ROM:CFD8                 db  99h ; Ù
+ROM:CFD9                 db  18h
+ROM:CFDA                 db  99h ; Ù
+ROM:CFDB                 db  18h
+ROM:CFDC                 db  99h ; Ù
+ROM:CFDD                 db    0
+ROM:CFDE                 db  99h ; Ù
+ROM:CFDF                 db    0
+ROM:CFE0                 db  84h ; Ä
+ROM:CFE1                 db  99h ; Ù
+ROM:CFE2                 db  18h
+ROM:CFE3                 db  99h ; Ù
+ROM:CFE4                 db  18h
+ROM:CFE5                 db  99h ; Ù
+ROM:CFE6                 db  29h ; )
+ROM:CFE7                 db  99h ; Ù
+ROM:CFE8                 db  16h
+ROM:CFE9                 db  99h ; Ù
+ROM:CFEA                 db    0
+ROM:CFEB                 db  99h ; Ù
+ROM:CFEC                 db    0
+ROM:CFED                 db  99h ; Ù
+ROM:CFEE                 db    0
+ROM:CFEF                 db  99h ; Ù
+ROM:CFF0                 db  16h
+ROM:CFF1                 db  85h ; Å
+ROM:CFF2                 db  99h ; Ù
+ROM:CFF3                 db  18h
+ROM:CFF4                 db  99h ; Ù
+ROM:CFF5                 db  18h
+ROM:CFF6                 db  99h ; Ù
+ROM:CFF7                 db  27h ; '
+ROM:CFF8                 db  99h ; Ù
+ROM:CFF9                 db    0
+ROM:CFFA                 db  84h ; Ä
+ROM:CFFB                 db  99h ; Ù
+ROM:CFFC                 db  18h
+ROM:CFFD                 db  99h ; Ù
+ROM:CFFE                 db  18h
+ROM:CFFF                 db  99h ; Ù
+ROM:D000                 db    0
+ROM:D001                 db  99h ; Ù
+ROM:D002                 db  14h
+ROM:D003                 db  99h ; Ù
+ROM:D004                 db  18h
+ROM:D005                 db  99h ; Ù
+ROM:D006                 db  18h
+ROM:D007                 db  99h ; Ù
+ROM:D008                 db  25h ; %
+ROM:D009                 db  99h ; Ù
+ROM:D00A                 db    0
+ROM:D00B                 db  99h ; Ù
+ROM:D00C                 db  18h
+ROM:D00D                 db  99h ; Ù
+ROM:D00E                 db    0
+ROM:D00F                 db  97h ; ×
+ROM:D010                 db  29h ; )
+ROM:D011                 db  97h ; ×
+ROM:D012                 db  12h
+ROM:D013                 db  85h ; Å
+ROM:D014                 db  97h ; ×
+ROM:D015                 db  18h
+ROM:D016                 db  97h ; ×
+ROM:D017                 db  18h
+ROM:D018                 db  97h ; ×
+ROM:D019                 db    0
+ROM:D01A                 db  97h ; ×
+ROM:D01B                 db    0
+ROM:D01C                 db  97h ; ×
+ROM:D01D                 db    0
+ROM:D01E                 db  97h ; ×
+ROM:D01F                 db    0
+ROM:D020                 db  97h ; ×
+ROM:D021                 db  29h ; )
+ROM:D022                 db  97h ; ×
+ROM:D023                 db  12h
+ROM:D024                 db  84h ; Ä
+ROM:D025                 db  97h ; ×
+ROM:D026                 db  18h
+ROM:D027                 db  97h ; ×
+ROM:D028                 db  18h
+ROM:D029                 db  97h ; ×
+ROM:D02A                 db    0
+ROM:D02B                 db  97h ; ×
+ROM:D02C                 db    0
+ROM:D02D                 db  97h ; ×
+ROM:D02E                 db    0
+ROM:D02F                 db  97h ; ×
+ROM:D030                 db    0
+ROM:D031                 db  97h ; ×
+ROM:D032                 db  2Ah ; *
+ROM:D033                 db  97h ; ×
+ROM:D034                 db  12h
+ROM:D035                 db  85h ; Å
+ROM:D036                 db  97h ; ×
+ROM:D037                 db  18h
+ROM:D038                 db  97h ; ×
+ROM:D039                 db  18h
+ROM:D03A                 db  97h ; ×
+ROM:D03B                 db    0
+ROM:D03C                 db  97h ; ×
+ROM:D03D                 db  12h
+ROM:D03E                 db  97h ; ×
+ROM:D03F                 db    0
+ROM:D040                 db  97h ; ×
+ROM:D041                 db    0
+ROM:D042                 db  97h ; ×
+ROM:D043                 db  29h ; )
+ROM:D044                 db  97h ; ×
+ROM:D045                 db    0
+ROM:D046                 db  84h ; Ä
+ROM:D047                 db  97h ; ×
+ROM:D048                 db  18h
+ROM:D049                 db  97h ; ×
+ROM:D04A                 db    0
+ROM:D04B                 db  97h ; ×
+ROM:D04C                 db  2Ch ; ,
+ROM:D04D                 db  97h ; ×
+ROM:D04E                 db  12h
+ROM:D04F                 db  85h ; Å
+ROM:D050                 db  97h ; ×
+ROM:D051                 db  18h
+ROM:D052                 db  97h ; ×
+ROM:D053                 db  18h
+ROM:D054                 db  95h ; Õ
+ROM:D055                 db    0
+ROM:D056                 db  95h ; Õ
+ROM:D057                 db    0
+ROM:D058                 db  95h ; Õ
+ROM:D059                 db    0
+ROM:D05A                 db  95h ; Õ
+ROM:D05B                 db    0
+ROM:D05C                 db  95h ; Õ
+ROM:D05D                 db  31h ; 1
+ROM:D05E                 db  95h ; Õ
+ROM:D05F                 db  12h
+ROM:D060                 db  95h ; Õ
+ROM:D061                 db  18h
+ROM:D062                 db  95h ; Õ
+ROM:D063                 db  18h
+ROM:D064                 db  95h ; Õ
+ROM:D065                 db  30h ; 0
+ROM:D066                 db  95h ; Õ
+ROM:D067                 db    0
+ROM:D068                 db  84h ; Ä
+ROM:D069                 db  95h ; Õ
+ROM:D06A                 db  18h
+ROM:D06B                 db  95h ; Õ
+ROM:D06C                 db  18h
+ROM:D06D                 db  95h ; Õ
+ROM:D06E                 db  31h ; 1
+ROM:D06F                 db  95h ; Õ
+ROM:D070                 db  12h
+ROM:D071                 db  95h ; Õ
+ROM:D072                 db    0
+ROM:D073                 db  95h ; Õ
+ROM:D074                 db    0
+ROM:D075                 db  95h ; Õ
+ROM:D076                 db  30h ; 0
+ROM:D077                 db  95h ; Õ
+ROM:D078                 db  12h
+ROM:D079                 db  85h ; Å
+ROM:D07A                 db  95h ; Õ
+ROM:D07B                 db  18h
+ROM:D07C                 db  95h ; Õ
+ROM:D07D                 db  18h
+ROM:D07E                 db  95h ; Õ
+ROM:D07F                 db  2Ch ; ,
+ROM:D080                 db  95h ; Õ
+ROM:D081                 db  12h
+ROM:D082                 db  95h ; Õ
+ROM:D083                 db  18h
+ROM:D084                 db  95h ; Õ
+ROM:D085                 db  18h
+ROM:D086                 db  95h ; Õ
+ROM:D087                 db  27h ; '
+ROM:D088                 db  95h ; Õ
+ROM:D089                 db  11h
+ROM:D08A                 db  84h ; Ä
+ROM:D08B                 db  95h ; Õ
+ROM:D08C                 db  18h
+ROM:D08D                 db  95h ; Õ
+ROM:D08E                 db  18h
+ROM:D08F                 db  95h ; Õ
+ROM:D090                 db    0
+ROM:D091                 db  95h ; Õ
+ROM:D092                 db  12h
+ROM:D093                 db  95h ; Õ
+ROM:D094                 db    0
+ROM:D095                 db  95h ; Õ
+ROM:D096                 db    0
+ROM:D097                 db  93h ; Ó
+ROM:D098                 db  30h ; 0
+ROM:D099                 db  93h ; Ó
+ROM:D09A                 db  14h
+ROM:D09B                 db  85h ; Å
+ROM:D09C                 db  93h ; Ó
+ROM:D09D                 db  18h
+ROM:D09E                 db  93h ; Ó
+ROM:D09F                 db  18h
+ROM:D0A0                 db  93h ; Ó
+ROM:D0A1                 db    0
+ROM:D0A2                 db  93h ; Ó
+ROM:D0A3                 db    0
+ROM:D0A4                 db  93h ; Ó
+ROM:D0A5                 db    0
+ROM:D0A6                 db  93h ; Ó
+ROM:D0A7                 db    0
+ROM:D0A8                 db  93h ; Ó
+ROM:D0A9                 db  30h ; 0
+ROM:D0AA                 db  93h ; Ó
+ROM:D0AB                 db  14h
+ROM:D0AC                 db  84h ; Ä
+ROM:D0AD                 db  93h ; Ó
+ROM:D0AE                 db  18h
+ROM:D0AF                 db  93h ; Ó
+ROM:D0B0                 db  18h
+ROM:D0B1                 db  93h ; Ó
+ROM:D0B2                 db    0
+ROM:D0B3                 db  93h ; Ó
+ROM:D0B4                 db    0
+ROM:D0B5                 db  93h ; Ó
+ROM:D0B6                 db    0
+ROM:D0B7                 db  93h ; Ó
+ROM:D0B8                 db    0
+ROM:D0B9                 db  92h ; Ò
+ROM:D0BA                 db  31h ; 1
+ROM:D0BB                 db  92h ; Ò
+ROM:D0BC                 db  14h
+ROM:D0BD                 db  85h ; Å
+ROM:D0BE                 db  92h ; Ò
+ROM:D0BF                 db  18h
+ROM:D0C0                 db  92h ; Ò
+ROM:D0C1                 db  18h
+ROM:D0C2                 db  92h ; Ò
+ROM:D0C3                 db    0
+ROM:D0C4                 db  92h ; Ò
+ROM:D0C5                 db  14h
+ROM:D0C6                 db  92h ; Ò
+ROM:D0C7                 db    0
+ROM:D0C8                 db  92h ; Ò
+ROM:D0C9                 db    0
+ROM:D0CA                 db  92h ; Ò
+ROM:D0CB                 db  30h ; 0
+ROM:D0CC                 db  92h ; Ò
+ROM:D0CD                 db    0
+ROM:D0CE                 db  84h ; Ä
+ROM:D0CF                 db  92h ; Ò
+ROM:D0D0                 db  18h
+ROM:D0D1                 db  92h ; Ò
+ROM:D0D2                 db    0
+ROM:D0D3                 db  92h ; Ò
+ROM:D0D4                 db  33h ; 3
+ROM:D0D5                 db  92h ; Ò
+ROM:D0D6                 db  14h
+ROM:D0D7                 db  85h ; Å
+ROM:D0D8                 db  92h ; Ò
+ROM:D0D9                 db  18h
+ROM:D0DA                 db  92h ; Ò
+ROM:D0DB                 db  18h
+ROM:D0DC                 db  91h ; Ñ
+ROM:D0DD                 db    0
+ROM:D0DE                 db  91h ; Ñ
+ROM:D0DF                 db    0
+ROM:D0E0                 db  91h ; Ñ
+ROM:D0E1                 db    0
+ROM:D0E2                 db  91h ; Ñ
+ROM:D0E3                 db    0
+ROM:D0E4                 db  91h ; Ñ
+ROM:D0E5                 db  31h ; 1
+ROM:D0E6                 db  91h ; Ñ
+ROM:D0E7                 db  14h
+ROM:D0E8                 db  91h ; Ñ
+ROM:D0E9                 db  18h
+ROM:D0EA                 db  91h ; Ñ
+ROM:D0EB                 db  18h
+ROM:D0EC                 db  91h ; Ñ
+ROM:D0ED                 db  30h ; 0
+ROM:D0EE                 db  91h ; Ñ
+ROM:D0EF                 db    0
+ROM:D0F0                 db  84h ; Ä
+ROM:D0F1                 db  91h ; Ñ
+ROM:D0F2                 db  18h
+ROM:D0F3                 db  91h ; Ñ
+ROM:D0F4                 db  18h
+ROM:D0F5                 db  91h ; Ñ
+ROM:D0F6                 db  31h ; 1
+ROM:D0F7                 db  91h ; Ñ
+ROM:D0F8                 db  14h
+ROM:D0F9                 db  91h ; Ñ
+ROM:D0FA                 db    0
+ROM:D0FB                 db  91h ; Ñ
+ROM:D0FC                 db    0
+ROM:D0FD                 db  90h ; Ð
+ROM:D0FE                 db  30h ; 0
+ROM:D0FF                 db  90h ; Ð
+ROM:D100                 db  16h
+ROM:D101                 db  85h ; Å
+ROM:D102                 db  90h ; Ð
+ROM:D103                 db  18h
+ROM:D104                 db  90h ; Ð
+ROM:D105                 db  18h
+ROM:D106                 db  90h ; Ð
+ROM:D107                 db  2Eh ; .
+ROM:D108                 db  90h ; Ð
+ROM:D109                 db    0
+ROM:D10A                 db  84h ; Ä
+ROM:D10B                 db  90h ; Ð
+ROM:D10C                 db  18h
+ROM:D10D                 db  90h ; Ð
+ROM:D10E                 db  18h
+ROM:D10F                 db  90h ; Ð
+ROM:D110                 db  2Ch ; ,
+ROM:D111                 db  90h ; Ð
+ROM:D112                 db  18h
+ROM:D113                 db  90h ; Ð
+ROM:D114                 db  18h
+ROM:D115                 db  90h ; Ð
+ROM:D116                 db  18h
+ROM:D117                 db  90h ; Ð
+ROM:D118                 db  2Ah ; *
+ROM:D119                 db  90h ; Ð
+ROM:D11A                 db    0
+ROM:D11B                 db  90h ; Ð
+ROM:D11C                 db  18h
+ROM:D11D                 db  90h ; Ð
+ROM:D11E                 db    0
+ROM:D11F                 db  88h ; È
+ROM:D120                 db  42h ; B
+ROM:D121                 db  82h ; Â
+ROM:D122                 db  0Dh
+ROM:D123                 db  85h ; Å
+ROM:D124                 db  18h
+ROM:D125                 db  87h ; Ç
+ROM:D126                 db  18h
+ROM:D127                 db  42h ; B
+ROM:D128                 db    0
+ROM:D129                 db    0
+ROM:D12A                 db    0
+ROM:D12B                 db  42h ; B
+ROM:D12C                 db  0Dh
+ROM:D12D                 db  84h ; Ä
+ROM:D12E                 db  18h
+ROM:D12F                 db  18h
+ROM:D130                 db  41h ; A
+ROM:D131                 db    0
+ROM:D132                 db    0
+ROM:D133                 db    0
+ROM:D134                 db  41h ; A
+ROM:D135                 db  0Dh
+ROM:D136                 db  85h ; Å
+ROM:D137                 db  18h
+ROM:D138                 db  18h
+ROM:D139                 db  41h ; A
+ROM:D13A                 db  0Dh
+ROM:D13B                 db    0
+ROM:D13C                 db    0
+ROM:D13D                 db  41h ; A
+ROM:D13E                 db    0
+ROM:D13F                 db  84h ; Ä
+ROM:D140                 db  18h
+ROM:D141                 db    0
+ROM:D142                 db  41h ; A
+ROM:D143                 db  0Dh
+ROM:D144                 db  85h ; Å
+ROM:D145                 db  18h
+ROM:D146                 db  18h
+ROM:D147                 db  3Fh ; ?
+ROM:D148                 db    0
+ROM:D149                 db    0
+ROM:D14A                 db    0
+ROM:D14B                 db  3Fh ; ?
+ROM:D14C                 db  0Dh
+ROM:D14D                 db  18h
+ROM:D14E                 db  18h
+ROM:D14F                 db  3Fh ; ?
+ROM:D150                 db    0
+ROM:D151                 db  84h ; Ä
+ROM:D152                 db  18h
+ROM:D153                 db  18h
+ROM:D154                 db  41h ; A
+ROM:D155                 db  0Dh
+ROM:D156                 db    0
+ROM:D157                 db    0
+ROM:D158                 db  41h ; A
+ROM:D159                 db  0Dh
+ROM:D15A                 db  85h ; Å
+ROM:D15B                 db  18h
+ROM:D15C                 db  18h
+ROM:D15D                 db  41h ; A
+ROM:D15E                 db    0
+ROM:D15F                 db  18h
+ROM:D160                 db  18h
+ROM:D161                 db  41h ; A
+ROM:D162                 db  0Ch
+ROM:D163                 db  84h ; Ä
+ROM:D164                 db  18h
+ROM:D165                 db  18h
+ROM:D166                 db  41h ; A
+ROM:D167                 db    0
+ROM:D168                 db    0
+ROM:D169                 db    0
+ROM:D16A                 db  42h ; B
+ROM:D16B                 db  0Ah
+ROM:D16C                 db  85h ; Å
+ROM:D16D                 db  18h
+ROM:D16E                 db  18h
+ROM:D16F                 db  42h ; B
+ROM:D170                 db    0
+ROM:D171                 db    0
+ROM:D172                 db    0
+ROM:D173                 db  42h ; B
+ROM:D174                 db  0Ah
+ROM:D175                 db  84h ; Ä
+ROM:D176                 db  18h
+ROM:D177                 db  18h
+ROM:D178                 db  41h ; A
+ROM:D179                 db    0
+ROM:D17A                 db    0
+ROM:D17B                 db    0
+ROM:D17C                 db  41h ; A
+ROM:D17D                 db  0Ah
+ROM:D17E                 db  85h ; Å
+ROM:D17F                 db  18h
+ROM:D180                 db  18h
+ROM:D181                 db  41h ; A
+ROM:D182                 db  0Ah
+ROM:D183                 db    0
+ROM:D184                 db    0
+ROM:D185                 db  41h ; A
+ROM:D186                 db    0
+ROM:D187                 db  84h ; Ä
+ROM:D188                 db  18h
+ROM:D189                 db    0
+ROM:D18A                 db  41h ; A
+ROM:D18B                 db  0Ah
+ROM:D18C                 db  85h ; Å
+ROM:D18D                 db  18h
+ROM:D18E                 db  18h
+ROM:D18F                 db  3Dh ; =
+ROM:D190                 db    0
+ROM:D191                 db    0
+ROM:D192                 db    0
+ROM:D193                 db  3Dh ; =
+ROM:D194                 db  0Ah
+ROM:D195                 db  18h
+ROM:D196                 db  18h
+ROM:D197                 db  3Dh ; =
+ROM:D198                 db    0
+ROM:D199                 db  84h ; Ä
+ROM:D19A                 db  18h
+ROM:D19B                 db  18h
+ROM:D19C                 db  3Fh ; ?
+ROM:D19D                 db  0Ah
+ROM:D19E                 db    0
+ROM:D19F                 db    0
+ROM:D1A0                 db  3Fh ; ?
+ROM:D1A1                 db  0Ah
+ROM:D1A2                 db  85h ; Å
+ROM:D1A3                 db  18h
+ROM:D1A4                 db  18h
+ROM:D1A5                 db  3Fh ; ?
+ROM:D1A6                 db    0
+ROM:D1A7                 db  84h ; Ä
+ROM:D1A8                 db  18h
+ROM:D1A9                 db  18h
+ROM:D1AA                 db  3Fh ; ?
+ROM:D1AB                 db  14h
+ROM:D1AC                 db  18h
+ROM:D1AD                 db  18h
+ROM:D1AE                 db  3Fh ; ?
+ROM:D1AF                 db    0
+ROM:D1B0                 db  18h
+ROM:D1B1                 db    0
+ROM:D1B2                 db  42h ; B
+ROM:D1B3                 db  12h
+ROM:D1B4                 db  85h ; Å
+ROM:D1B5                 db  18h
+ROM:D1B6                 db  18h
+ROM:D1B7                 db  42h ; B
+ROM:D1B8                 db    0
+ROM:D1B9                 db    0
+ROM:D1BA                 db    0
+ROM:D1BB                 db  42h ; B
+ROM:D1BC                 db  12h
+ROM:D1BD                 db  84h ; Ä
+ROM:D1BE                 db  18h
+ROM:D1BF                 db  18h
+ROM:D1C0                 db  41h ; A
+ROM:D1C1                 db    0
+ROM:D1C2                 db    0
+ROM:D1C3                 db    0
+ROM:D1C4                 db    0
+ROM:D1C5                 db  12h
+ROM:D1C6                 db  85h ; Å
+ROM:D1C7                 db  18h
+ROM:D1C8                 db  18h
+ROM:D1C9                 db    0
+ROM:D1CA                 db  12h
+ROM:D1CB                 db    0
+ROM:D1CC                 db    0
+ROM:D1CD                 db    0
+ROM:D1CE                 db    0
+ROM:D1CF                 db  84h ; Ä
+ROM:D1D0                 db  18h
+ROM:D1D1                 db    0
+ROM:D1D2                 db    0
+ROM:D1D3                 db  12h
+ROM:D1D4                 db  85h ; Å
+ROM:D1D5                 db  18h
+ROM:D1D6                 db  18h
+ROM:D1D7                 db  3Fh ; ?
+ROM:D1D8                 db    0
+ROM:D1D9                 db    0
+ROM:D1DA                 db    0
+ROM:D1DB                 db  3Fh ; ?
+ROM:D1DC                 db  12h
+ROM:D1DD                 db  18h
+ROM:D1DE                 db  18h
+ROM:D1DF                 db  3Fh ; ?
+ROM:D1E0                 db    0
+ROM:D1E1                 db  84h ; Ä
+ROM:D1E2                 db  18h
+ROM:D1E3                 db  18h
+ROM:D1E4                 db  41h ; A
+ROM:D1E5                 db  12h
+ROM:D1E6                 db    0
+ROM:D1E7                 db    0
+ROM:D1E8                 db    0
+ROM:D1E9                 db  12h
+ROM:D1EA                 db  85h ; Å
+ROM:D1EB                 db  18h
+ROM:D1EC                 db  18h
+ROM:D1ED                 db    0
+ROM:D1EE                 db  12h
+ROM:D1EF                 db  18h
+ROM:D1F0                 db  18h
+ROM:D1F1                 db    0
+ROM:D1F2                 db  11h
+ROM:D1F3                 db  84h ; Ä
+ROM:D1F4                 db  18h
+ROM:D1F5                 db  18h
+ROM:D1F6                 db    0
+ROM:D1F7                 db  12h
+ROM:D1F8                 db    0
+ROM:D1F9                 db    0
+ROM:D1FA                 db  42h ; B
+ROM:D1FB                 db  14h
+ROM:D1FC                 db  85h ; Å
+ROM:D1FD                 db  18h
+ROM:D1FE                 db  18h
+ROM:D1FF                 db  42h ; B
+ROM:D200                 db    0
+ROM:D201                 db    0
+ROM:D202                 db    0
+ROM:D203                 db  42h ; B
+ROM:D204                 db  14h
+ROM:D205                 db  84h ; Ä
+ROM:D206                 db  18h
+ROM:D207                 db  18h
+ROM:D208                 db  41h ; A
+ROM:D209                 db    0
+ROM:D20A                 db    0
+ROM:D20B                 db    0
+ROM:D20C                 db    0
+ROM:D20D                 db  14h
+ROM:D20E                 db  85h ; Å
+ROM:D20F                 db  18h
+ROM:D210                 db  18h
+ROM:D211                 db  41h ; A
+ROM:D212                 db  14h
+ROM:D213                 db    0
+ROM:D214                 db    0
+ROM:D215                 db  3Fh ; ?
+ROM:D216                 db    0
+ROM:D217                 db  84h ; Ä
+ROM:D218                 db  18h
+ROM:D219                 db    0
+ROM:D21A                 db    0
+ROM:D21B                 db  14h
+ROM:D21C                 db  85h ; Å
+ROM:D21D                 db  18h
+ROM:D21E                 db  18h
+ROM:D21F                 db  3Dh ; =
+ROM:D220                 db    0
+ROM:D221                 db  84h ; Ä
+ROM:D222                 db  18h
+ROM:D223                 db    0
+ROM:D224                 db  3Dh ; =
+ROM:D225                 db  14h
+ROM:D226                 db  85h ; Å
+ROM:D227                 db  18h
+ROM:D228                 db  18h
+ROM:D229                 db  3Dh ; =
+ROM:D22A                 db    0
+ROM:D22B                 db  18h
+ROM:D22C                 db  18h
+ROM:D22D                 db  3Ch ; <
+ROM:D22E                 db  14h
+ROM:D22F                 db  84h ; Ä
+ROM:D230                 db  18h
+ROM:D231                 db    0
+ROM:D232                 db    0
+ROM:D233                 db  16h
+ROM:D234                 db  85h ; Å
+ROM:D235                 db  18h
+ROM:D236                 db  18h
+ROM:D237                 db  3Ch ; <
+ROM:D238                 db    0
+ROM:D239                 db  18h
+ROM:D23A                 db  18h
+ROM:D23B                 db  3Ah ; :
+ROM:D23C                 db  18h
+ROM:D23D                 db  84h ; Ä
+ROM:D23E                 db  18h
+ROM:D23F                 db  18h
+ROM:D240                 db 0C1h ; +
+ROM:D241                 db    0
+ROM:D242                 db    0
+ROM:D243                 db  85h ; Å
+ROM:D244                 db  18h
+ROM:D245                 db    0
+ROM:D246                 db    0
+ROM:D247                 db    0
+ROM:FFFF                 end
