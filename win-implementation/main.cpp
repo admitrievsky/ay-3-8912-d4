@@ -10,7 +10,7 @@ constexpr unsigned int CHANNEL_OUTPUT_VOLUME = (128 / 4 - 1);
 constexpr uint8_t MAX_AY_CHANNEL_VOLUME = 15;
 constexpr double M_PI = 3.14159265358979323846;
 constexpr unsigned int SAMPLES_PER_SEC = 11025;
-constexpr size_t OUTPUT_BUFFER_LENGTH = SAMPLES_PER_SEC * 100;
+constexpr size_t OUTPUT_BUFFER_LENGTH = SAMPLES_PER_SEC * 300;
 
 
 int8_t sine_table[SINE_TABLE_SIZE];
@@ -42,8 +42,8 @@ private:
     bool is_noise_enabled = false;
 
 public:
-    void init_tone(uint8_t tone) {
-        period = tone_period_table[tone];
+    void init_tone(uint8_t tone, uint16_t shift = 0) {
+        period = tone_period_table[tone] + shift;
     }
 
     void set_volume(uint8_t _volume) {
@@ -65,6 +65,12 @@ public:
         return (is_tone_enabled ? volume * int32_t(sine_table[wave_position >> 8u]) / MAX_AY_CHANNEL_VOLUME : 0);
     }
 } channel_a, channel_b, channel_c;
+
+enum InstrumentType {
+    ORNAMENT = 0,
+    SAMPLE = 1,
+    NOISE = 2
+};
 
 struct ChannelState {
     uint8_t current_note{};
@@ -101,7 +107,7 @@ private:
         while ((pattern_current_note_ptr = data->read_word(position_ptr)) == 0xFFFF) {
             start_from_the_beginning();
         }
-        pattern_counter = 63;
+        pattern_counter = 64;
         pattern_current_note_ptr = data->read_word(position_ptr);
         pattern_instrument_set_ptr = data->read_word(instrument_set_for_position);
 
@@ -124,7 +130,7 @@ public:
             if (note < 0x80) {
                 channel.init_tone(note);
                 channel_state.current_note = note;
-                channel_state.instrument_playback_ptr = channel_state.instrument_ptr;
+                channel_state.instrument_playback_ptr = channel_state.instrument_ptr + 1;
                 return;
             }
             if ((note & 0xE0u) == 0x80) {
@@ -141,6 +147,39 @@ public:
 
     }
 
+    void manage_instruments(Channel &channel, ChannelState &channel_state) {
+        auto instrument_type = (InstrumentType) data->read_byte(channel_state.instrument_ptr);
+        uint8_t val = data->read_byte(channel_state.instrument_playback_ptr);
+        switch (instrument_type) {
+            case ORNAMENT: {
+                if (val == 0xFF)
+                    return;
+                channel_state.instrument_playback_ptr++;
+                uint8_t new_note = channel_state.current_note + (int8_t)(
+                        val < 0x80 ? val : -(val & 0x80u)
+                );
+                channel.init_tone(new_note);
+                auto volume = data->read_byte(channel_state.instrument_playback_ptr++);
+                channel.set_volume(volume);
+            }
+                break;
+            case SAMPLE: {
+                if (val == 0xFF)
+                    return;
+                channel_state.instrument_playback_ptr++;
+                channel.init_tone(channel_state.current_note, (
+                        (int8_t)(val < 0x80 ? val : -(val & 0x80u)) / 6 // magic
+                ));
+                auto volume = data->read_byte(channel_state.instrument_playback_ptr++);
+                channel.set_volume(volume);
+            }
+                break;
+            case NOISE:
+                channel.set_volume(0);
+                break;
+        }
+    }
+
     void next() {
         if (!--speed_counter) {
             speed_counter = speed;
@@ -154,6 +193,10 @@ public:
             parse_note(channel_c, state_c);
             parse_note(channel_c, state_c); // Pseudo channel, used only for commands
         }
+
+        manage_instruments(channel_a, state_a);
+        manage_instruments(channel_b, state_b);
+        manage_instruments(channel_c, state_c);
     }
 } state;
 
