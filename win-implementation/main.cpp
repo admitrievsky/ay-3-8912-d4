@@ -139,6 +139,7 @@ public:
             if (!note)
                 return;
             if (note < 0x80) {
+                note -= 2;
                 channel.init_tone(note);
                 channel_state.current_note = note;
                 channel_state.instrument_playback_ptr = channel_state.instrument_ptr + 1;
