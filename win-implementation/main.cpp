@@ -35,8 +35,7 @@ class ParseException : std::exception {
 
 uint16_t xs = 1;
 
-uint16_t xor_shift()
-{
+uint16_t xor_shift() {
     xs ^= xs << 7u;
     xs ^= xs >> 9u;
     xs ^= xs << 8u;
@@ -114,6 +113,11 @@ private:
         instrument_set_for_position = data->instrument_table_for_positions;
     }
 
+    void start_from_position(uint8_t position) {
+        position_ptr = data->positions_table + position * 2;
+        instrument_set_for_position = data->instrument_table_for_positions + position * 2;
+    }
+
     void init_next_pattern() {
         while ((pattern_current_note_ptr = data->read_word(position_ptr)) == 0xFFFF) {
             start_from_the_beginning();
@@ -145,16 +149,29 @@ public:
                 channel_state.instrument_playback_ptr = channel_state.instrument_ptr + 1;
                 return;
             }
-            if ((note & 0xE0u) == 0x80) {
+            auto command = note & 0xE0u;
+            if (command == 0x80) { // instrument specified
                 uint8_t instrument = note & 0x1Fu;
                 if (instrument < 0x10) {
                     channel_state.instrument_ptr = data->read_word(pattern_instrument_set_ptr + instrument * 2);
-                    continue;
                 } else {
                     // not clear???
-                    continue;
                 }
+                continue;
             }
+            if (command == 0xc0) { // go to position
+                auto position = note & 0x1Fu;
+                pattern_counter = 0;
+                if (position)
+                    start_from_position(position);
+                continue;
+            }
+            if (command == 0xa0) { // change speed
+                speed = note & 0x0Fu;
+                continue;
+            }
+            std::cout << "Unknown command: " << std::hex << (uint16_t) command << std::endl;
+            throw ParseException();
         }
 
     }
