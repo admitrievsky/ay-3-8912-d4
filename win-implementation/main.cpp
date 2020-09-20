@@ -33,6 +33,16 @@ void init_tone_period_table() {
 class ParseException : std::exception {
 };
 
+uint16_t xs = 1;
+
+uint16_t xor_shift()
+{
+    xs ^= xs << 7u;
+    xs ^= xs >> 9u;
+    xs ^= xs << 8u;
+    return xs;
+}
+
 class Channel {
 private:
     uint16_t period = 0;
@@ -62,7 +72,8 @@ public:
         wave_position += period;
         if (wave_position >= (SINE_TABLE_SIZE << 8u))
             wave_position -= SINE_TABLE_SIZE << 8u;
-        return (is_tone_enabled ? volume * int32_t(sine_table[wave_position >> 8u]) / MAX_AY_CHANNEL_VOLUME : 0);
+        return (is_tone_enabled ? volume * int32_t(sine_table[wave_position >> 8u]) / MAX_AY_CHANNEL_VOLUME : 0) +
+               (is_noise_enabled ? volume * int16_t(xor_shift()) / 256 / 16 / MAX_AY_CHANNEL_VOLUME : 0);
     }
 } channel_a, channel_b, channel_c;
 
@@ -150,34 +161,48 @@ public:
     void manage_instruments(Channel &channel, ChannelState &channel_state) {
         auto instrument_type = (InstrumentType) data->read_byte(channel_state.instrument_ptr);
         uint8_t val = data->read_byte(channel_state.instrument_playback_ptr);
-        switch (instrument_type) {
-            case ORNAMENT: {
-                if (val == 0xFF)
-                    return;
-                channel_state.instrument_playback_ptr++;
-                uint8_t new_note = channel_state.current_note + (int8_t)(
+
+        if (instrument_type != NOISE && instrument_type != SAMPLE && instrument_type != ORNAMENT)
+            throw ParseException();
+
+        if (instrument_type == NOISE) {
+            if (val == 0xFF) {
+                channel.enable_tone(false);
+                channel.enable_noise(false);
+                return;
+            }
+            if (val >= 0x80) {
+                channel.enable_tone(false);
+                channel.enable_noise(true);
+                // we do not store noise frequency, due to emulation limitations
+            } else {
+                // play tone from instrument
+                channel.enable_tone(true);
+                channel.enable_noise(false);
+                channel.init_tone((val & 0x3Fu) / 2);
+            }
+        }
+
+        if (instrument_type == ORNAMENT || instrument_type == SAMPLE) {
+            if (val == 0xFF)
+                return;
+            channel.enable_tone(true);
+            channel.enable_noise(false);
+            if (instrument_type == ORNAMENT) {
+                uint8_t new_note = channel_state.current_note + (
                         val < 0x80 ? val : -(val & 0x80u)
                 );
                 channel.init_tone(new_note);
-                auto volume = data->read_byte(channel_state.instrument_playback_ptr++);
-                channel.set_volume(volume);
-            }
-                break;
-            case SAMPLE: {
-                if (val == 0xFF)
-                    return;
-                channel_state.instrument_playback_ptr++;
+            } else { // SAMPLE
                 channel.init_tone(channel_state.current_note, (
-                        (int8_t)(val < 0x80 ? val : -(val & 0x80u)) / 6 // magic
+                        (val < 0x80 ? val : -(val & 0x80u)) / 8 // magic
                 ));
-                auto volume = data->read_byte(channel_state.instrument_playback_ptr++);
-                channel.set_volume(volume);
             }
-                break;
-            case NOISE:
-                channel.set_volume(0);
-                break;
         }
+        channel_state.instrument_playback_ptr++;
+
+        auto volume = data->read_byte(channel_state.instrument_playback_ptr++);
+        channel.set_volume(volume);
     }
 
     void next() {
