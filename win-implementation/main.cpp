@@ -74,7 +74,7 @@ public:
         return (is_tone_enabled ? volume * int32_t(sine_table[wave_position >> 8u]) / MAX_AY_CHANNEL_VOLUME : 0) +
                (is_noise_enabled ? volume * int16_t(xor_shift()) / 256 / 16 / MAX_AY_CHANNEL_VOLUME : 0);
     }
-} channel_a, channel_b, channel_c;
+} channel_a, channel_b, channel_c, channel_pseudo;
 
 enum InstrumentType {
     ORNAMENT = 0,
@@ -99,7 +99,7 @@ private:
     uint16_t instrument_set_for_position{};
     uint16_t pattern_instrument_set_ptr{};
 
-    ChannelState state_a, state_b, state_c;
+    ChannelState state_a, state_b, state_c, state_pseudo;
 
     void init() {
         start_from_the_beginning();
@@ -236,7 +236,7 @@ public:
             parse_note(channel_a, state_a);
             parse_note(channel_b, state_b);
             parse_note(channel_c, state_c);
-            parse_note(channel_c, state_c); // Pseudo channel, used only for commands
+            parse_note(channel_pseudo, state_pseudo); // Pseudo channel, used only for commands
         }
 
         manage_instruments(channel_a, state_a);
