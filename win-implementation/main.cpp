@@ -5,28 +5,29 @@
 #include "music_data.h"
 
 constexpr size_t NUMBER_OF_NOTES = 80;
-constexpr size_t SINE_TABLE_SIZE = 128;
 constexpr unsigned int CHANNEL_OUTPUT_VOLUME = (128 / 4 - 1);
 constexpr uint8_t MAX_AY_CHANNEL_VOLUME = 15;
 constexpr double M_PI = 3.14159265358979323846;
 constexpr unsigned int SAMPLES_PER_SEC = 11025;
 constexpr size_t OUTPUT_BUFFER_LENGTH = SAMPLES_PER_SEC * 300;
 
+constexpr size_t FIXED_INTEGER_SIZE = 256;
+union FixedPoint {
+    struct {
+        uint8_t fraction;
+        uint8_t integer;
+    } parts;
+    WORD raw = 0;
+};
 
-int8_t sine_table[SINE_TABLE_SIZE];
-int16_t tone_period_table[NUMBER_OF_NOTES];
+FixedPoint tone_period_table[NUMBER_OF_NOTES];
 
 float output_buffer[OUTPUT_BUFFER_LENGTH];
-
-void init_sine_table() {
-    for (size_t i = 0; i < SINE_TABLE_SIZE; i++)
-        sine_table[i] = CHANNEL_OUTPUT_VOLUME * sin(2 * i * M_PI / SINE_TABLE_SIZE);
-}
 
 void init_tone_period_table() {
     for (size_t n = 0; n < NUMBER_OF_NOTES; n++) {
         const auto frequency = 32.703 * std::pow(2, double(n) / 12);
-        tone_period_table[n] = lround((SINE_TABLE_SIZE * frequency / SAMPLES_PER_SEC) * 256);
+        tone_period_table[n].raw = lround((FIXED_INTEGER_SIZE * frequency / SAMPLES_PER_SEC) * 256);
     }
 }
 
@@ -44,15 +45,15 @@ uint16_t xor_shift() {
 
 class Channel {
 private:
-    uint16_t period = 0;
-    uint16_t wave_position = 0;
+    FixedPoint period;
+    FixedPoint wave_position;
     uint8_t volume = 15;
     bool is_tone_enabled = false;
     bool is_noise_enabled = false;
 
 public:
     void init_tone(uint8_t tone, uint16_t shift = 0) {
-        period = tone_period_table[tone] + shift;
+        period.raw = tone_period_table[tone].raw + shift;
     }
 
     void set_volume(uint8_t _volume) {
@@ -68,10 +69,8 @@ public:
     }
 
     int8_t render() {
-        wave_position += period;
-        if (wave_position >= (SINE_TABLE_SIZE << 8u))
-            wave_position -= SINE_TABLE_SIZE << 8u;
-        return (is_tone_enabled ? volume * int32_t(sine_table[wave_position >> 8u]) / MAX_AY_CHANNEL_VOLUME : 0) +
+        wave_position.raw += period.raw;
+        return (is_tone_enabled ? volume * (wave_position.parts.integer < FIXED_INTEGER_SIZE / 2 ? CHANNEL_OUTPUT_VOLUME : -CHANNEL_OUTPUT_VOLUME) / MAX_AY_CHANNEL_VOLUME : 0) +
                (is_noise_enabled ? volume * int16_t(xor_shift()) / 256 / 16 / MAX_AY_CHANNEL_VOLUME : 0);
     }
 } channel_a, channel_b, channel_c, channel_pseudo;
@@ -247,11 +246,15 @@ public:
 int8_t render_sample(size_t tick) {
     if ((tick % (SAMPLES_PER_SEC / 50)) == 0)
         state.next();
-    return channel_a.render() + channel_b.render() + channel_c.render();
+    auto a = channel_a.render();
+    auto b = channel_b.render();
+    auto c = channel_c.render();
+    if (abs((int16_t)a + (int16_t)b + (int16_t)c) > 127)
+        std::cout<<"overload\n";
+    return a + b + c;
 }
 
 void render(MusicData &music_data) {
-    init_sine_table();
     init_tone_period_table();
 
     state.set_data(&music_data);
