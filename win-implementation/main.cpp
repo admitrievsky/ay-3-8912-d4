@@ -84,7 +84,7 @@ enum InstrumentType {
 
 struct ChannelState {
     uint8_t current_note{};
-    uint16_t instrument_ptr{};
+    uint16_t instrument_ptr = 0;
     uint16_t instrument_playback_ptr{};
 };
 
@@ -177,6 +177,8 @@ public:
     }
 
     void manage_instruments(Channel &channel, ChannelState &channel_state) {
+        if (!channel_state.instrument_ptr)
+            return;
         auto instrument_type = (InstrumentType) data->read_byte(channel_state.instrument_ptr);
         uint8_t val = data->read_byte(channel_state.instrument_playback_ptr);
 
