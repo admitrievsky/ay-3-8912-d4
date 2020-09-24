@@ -7,7 +7,6 @@
 constexpr size_t NUMBER_OF_NOTES = 80;
 constexpr unsigned int CHANNEL_OUTPUT_VOLUME = (128 / 4 - 1);
 constexpr uint8_t MAX_AY_CHANNEL_VOLUME = 15;
-constexpr double M_PI = 3.14159265358979323846;
 constexpr unsigned int SAMPLES_PER_SEC = 11025;
 constexpr size_t OUTPUT_BUFFER_LENGTH = SAMPLES_PER_SEC * 300;
 
@@ -70,7 +69,10 @@ public:
 
     int8_t render() {
         wave_position.raw += period.raw;
-        return (is_tone_enabled ? volume * (wave_position.parts.integer < FIXED_INTEGER_SIZE / 2 ? CHANNEL_OUTPUT_VOLUME : -CHANNEL_OUTPUT_VOLUME) / MAX_AY_CHANNEL_VOLUME : 0) +
+        return (is_tone_enabled ?
+                volume * (wave_position.parts.integer < (FIXED_INTEGER_SIZE / 2) ? (int8_t) CHANNEL_OUTPUT_VOLUME
+                                                                                 : -(int8_t) CHANNEL_OUTPUT_VOLUME
+                ) / MAX_AY_CHANNEL_VOLUME : 0) +
                (is_noise_enabled ? volume * int16_t(xor_shift()) / 256 / 16 / MAX_AY_CHANNEL_VOLUME : 0);
     }
 } channel_a, channel_b, channel_c, channel_pseudo;
@@ -127,13 +129,6 @@ private:
 
         position_ptr += 2;
         instrument_set_for_position += 2;
-    }
-
-public:
-
-    void set_data(MusicData *music_data) {
-        data = music_data;
-        init();
     }
 
     void parse_note(Channel &channel, ChannelState &channel_state) {
@@ -223,6 +218,12 @@ public:
         channel.set_volume(volume);
     }
 
+public:
+    void set_data(MusicData *music_data) {
+        data = music_data;
+        init();
+    }
+
     void next() {
         if (!--speed_counter) {
             speed_counter = speed;
@@ -258,10 +259,6 @@ void render(MusicData &music_data) {
     init_tone_period_table();
 
     state.set_data(&music_data);
-
-    channel_a.enable_tone(true);
-    channel_b.enable_tone(true);
-    channel_c.enable_tone(true);
 
     for (size_t i = 0; i < OUTPUT_BUFFER_LENGTH; i++)
         output_buffer[i] = float(render_sample(i)) / 128;
