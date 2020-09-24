@@ -7,7 +7,7 @@
 constexpr size_t NUMBER_OF_NOTES = 80;
 constexpr unsigned int CHANNEL_OUTPUT_VOLUME = (128 / 4 - 1);
 constexpr uint8_t MAX_AY_CHANNEL_VOLUME = 15;
-constexpr unsigned int SAMPLES_PER_SEC = 11025;
+constexpr unsigned int SAMPLES_PER_SEC = 44100;
 constexpr size_t OUTPUT_BUFFER_LENGTH = SAMPLES_PER_SEC * 300;
 
 constexpr size_t FIXED_INTEGER_SIZE = 256;
@@ -51,7 +51,7 @@ private:
     bool is_noise_enabled = false;
 
 public:
-    void init_tone(uint8_t tone, uint16_t shift = 0) {
+    void init_tone(uint8_t tone, int16_t shift = 0) {
         period.raw = tone_period_table[tone].raw + shift;
     }
 
@@ -207,8 +207,9 @@ private:
                 );
                 channel.init_tone(new_note);
             } else { // SAMPLE
+                auto shift = (int8_t) val / 48; // magic
                 channel.init_tone(channel_state.current_note, (
-                        (val < 0x80 ? val : -(val & 0x80u)) / 8 // magic
+                        (val < 0x80 ? shift : -shift)
                 ));
             }
         }
