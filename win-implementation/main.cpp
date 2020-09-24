@@ -30,6 +30,8 @@ void init_tone_period_table() {
     }
 }
 
+uint8_t volumes[] = {0, 0, 0, 0, 1, 1, 1, 2, 3, 4, 6, 7, 9, 11, 13, 15};
+
 class ParseException : std::exception {
 };
 
@@ -70,10 +72,11 @@ public:
     int8_t render() {
         wave_position.raw += period.raw;
         return (is_tone_enabled ?
-                volume * (wave_position.parts.integer < (FIXED_INTEGER_SIZE / 2) ? (int8_t) CHANNEL_OUTPUT_VOLUME
-                                                                                 : -(int8_t) CHANNEL_OUTPUT_VOLUME
+                volumes[volume] *
+                (wave_position.parts.integer < (FIXED_INTEGER_SIZE / 2) ? (int8_t) CHANNEL_OUTPUT_VOLUME
+                                                                        : -(int8_t) CHANNEL_OUTPUT_VOLUME
                 ) / MAX_AY_CHANNEL_VOLUME : 0) +
-               (is_noise_enabled ? volume * int16_t(xor_shift()) / 256 / 16 / MAX_AY_CHANNEL_VOLUME : 0);
+               (is_noise_enabled ? volumes[volume] * int16_t(xor_shift()) / 256 / 16 / MAX_AY_CHANNEL_VOLUME : 0);
     }
 } channel_a, channel_b, channel_c, channel_pseudo;
 
@@ -251,8 +254,8 @@ int8_t render_sample(size_t tick) {
     auto a = channel_a.render();
     auto b = channel_b.render();
     auto c = channel_c.render();
-    if (abs((int16_t)a + (int16_t)b + (int16_t)c) > 127)
-        std::cout<<"overload\n";
+    if (abs((int16_t) a + (int16_t) b + (int16_t) c) > 127)
+        std::cout << "overload\n";
     return a + b + c;
 }
 
