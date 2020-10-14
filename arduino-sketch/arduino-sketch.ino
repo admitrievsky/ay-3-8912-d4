@@ -7,8 +7,12 @@ Channel channel_a, channel_b, channel_c;
 MusicState state;
 
 ISR(TIMER2_OVF_vect) {
+    static uint8_t tick = 0;
   // will be called 31373 times per second
     OCR2B = (uint8_t)(channel_a.render() + channel_b.render() + channel_c.render()) + 128;
+
+    digitalWrite(LED_BUILTIN, channel_a.get_volume() > (tick & 0x0f));
+    tick ++;
 }
 
 void setup() {
@@ -26,6 +30,8 @@ void setup() {
 
   MusicData music_data = get_music_data_1();
   state.set_data(&music_data);
+
+  Serial.begin(9600);
 }
 
 void loop() {
@@ -33,5 +39,8 @@ void loop() {
   if ( (millis() - last_managed) > 20 ) {
     last_managed = millis();
     state.next(channel_a, channel_b, channel_c);
+
+    if (channel_c.get_is_noise_enabled())
+      UDR0 = 0; // it's not necessary to wait until transmission finishes, we only wanna flash the led
   }
 }

@@ -29,6 +29,8 @@ public:
     void init_tone(uint8_t tone, int16_t shift = 0);
 
     void set_volume(uint8_t _volume);
+    uint8_t get_volume();
+    bool get_is_noise_enabled();
 
     void enable_tone(bool _is_tone_enabled);
 

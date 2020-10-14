@@ -28,12 +28,20 @@ void Channel::set_volume(uint8_t _volume) {
     volume = volumes[_volume];
 }
 
+uint8_t Channel::get_volume() {
+    return is_tone_enabled ? volume : 0;
+}
+
 void Channel::enable_tone(bool _is_tone_enabled) {
     is_tone_enabled = _is_tone_enabled;
 }
 
 void Channel::enable_noise(bool _is_noise_enabled) {
     is_noise_enabled = _is_noise_enabled;
+}
+
+bool Channel::get_is_noise_enabled() {
+    return is_noise_enabled;
 }
 
 int8_t Channel::render() {
