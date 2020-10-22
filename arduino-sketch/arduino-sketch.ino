@@ -36,7 +36,7 @@ void setup() {
 
 void loop() {
   static uint32_t last_managed = 0;
-  if ( (millis() - last_managed) > 20 ) {
+  if ( (millis() - last_managed) >= 20 ) {
     last_managed = millis();
     state.next(channel_a, channel_b, channel_c);
 
