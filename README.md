@@ -1,6 +1,6 @@
 # Stuff on the music module of one famous game on ZX Spectrum 128k 
 
-This is data for the article "Music facilities of ZX Spectrum 128k" (TBD).
+This is data for the article "Music facilities of ZX Spectrum 128k" (https://habr.com/en/company/maxilect/blog/525124/).
 
 The repository contains the following parts:
 
